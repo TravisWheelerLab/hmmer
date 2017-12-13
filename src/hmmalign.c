@@ -34,6 +34,8 @@ static ESL_OPTIONS options[] = {
   { "--rna",       eslARG_NONE,     FALSE,     NULL, NULL, ALPHOPTS,  NULL,  NULL, "assert <seqfile>, <hmmfile> both RNA: no autodetection",      2 },
   { "--informat",  eslARG_STRING,    NULL,     NULL, NULL,   NULL,    NULL,  NULL, "assert <seqfile> is in format <s>: no autodetection",            2 },
   { "--outformat", eslARG_STRING, "Stockholm", NULL, NULL,   NULL,    NULL,  NULL, "output alignment in format <s>",                                    2 },
+
+  { "--pp_dump",   eslARG_OUTFILE,   NULL,     NULL, NULL,   NULL,    NULL,  NULL, "output posterior probability dumps to file <f>",                    2   },
   {  0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 };
 
@@ -99,6 +101,9 @@ main(int argc, char **argv)
   int           status;		/* easel/hmmer return code         */
   char          errbuf[eslERRBUFSIZE];
 
+  char         *ppdump_file = NULL;   /* posterior probability dump filename               */
+  FILE         *pp_fp       = NULL; /* posterior probability output stream                 */
+
   /* Parse the command line
    */
   go = esl_getopts_Create(options);
@@ -133,6 +138,14 @@ main(int argc, char **argv)
     if ((ofp = fopen(outfile, "w")) == NULL)
       cmdline_failure(argv[0], "failed to open -o output file %s for writing\n", outfile);
   }
+
+  /* Open pp_dump stream */
+  if ( (ppdump_file = esl_opt_GetString(go, "--pp_dump")) != NULL)
+  {
+    if ((pp_fp = fopen(ppdump_file, "w")) == NULL)
+      cmdline_failure(argv[0], "failed to open --pp_dump output file %s for writing\n", ppdump_file);
+  }
+
 
 
   /* If caller forced an alphabet on us, create the one the caller wants  
@@ -197,7 +210,7 @@ main(int argc, char **argv)
   for (idx = mapseq; idx < totseq; idx++)
     tr[idx] = p7_trace_CreateWithPP();
 
-  p7_tracealign_computeTraces(hmm, sq, mapseq, totseq - mapseq, tr);
+  p7_tracealign_computeTraces(hmm, sq, mapseq, totseq - mapseq, tr, pp_fp);
 
   p7_tracealign_Seqs(sq, tr, totseq, hmm->M, msaopts, hmm, &msa);
 

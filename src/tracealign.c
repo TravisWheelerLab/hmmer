@@ -233,7 +233,7 @@ p7_tracealign_MSA(const ESL_MSA *premsa, P7_TRACE **tr, int M, int optflags, ESL
  * Return:   eslOK if no errors
  */
 int
-p7_tracealign_computeTraces(P7_HMM *hmm, ESL_SQ  **sq, int offset, int N, P7_TRACE  **tr)
+p7_tracealign_computeTraces(P7_HMM *hmm, ESL_SQ  **sq, int offset, int N, P7_TRACE  **tr, FILE *pp_fp)
 {
 
   P7_OMX       *oxf     = NULL; /* optimized Forward matrix        */
@@ -277,6 +277,22 @@ p7_tracealign_computeTraces(P7_HMM *hmm, ESL_SQ  **sq, int offset, int N, P7_TRA
     p7_Backward(sq[idx]->dsq, sq[idx]->n, om, oxf, oxb, NULL);
 
     status = p7_Decoding(om, oxf, oxb, oxb);      /* <oxb> is now overwritten with post probabilities     */
+
+    if (pp_fp != NULL) {
+      oxb->dfp = pp_fp;
+      fprintf(pp_fp, "%s\n", sq[idx]->name );
+      for (int i=1; i<sq[idx]->n; i++) {
+
+        float xE = oxb->xmx[i*p7X_NXCELLS+p7X_E];
+        float xN = oxb->xmx[i*p7X_NXCELLS+p7X_N];
+        float xJ = oxb->xmx[i*p7X_NXCELLS+p7X_J];
+        float xB = oxb->xmx[i*p7X_NXCELLS+p7X_B];
+        float xC = oxb->xmx[i*p7X_NXCELLS+p7X_C];
+
+        p7_omx_DumpFBRow(oxb, FALSE, i, 8,5, xE, xN, xJ, xB, xC);
+      }
+      fprintf(pp_fp, "//\n" );
+    }
 
     if (status == eslOK)
       {
@@ -410,7 +426,7 @@ p7_tracealign_getMSAandStats(P7_HMM *hmm, ESL_SQ  **sq, int N, ESL_MSA **ret_msa
     tr[i] = p7_trace_CreateWithPP();
 
 
-  p7_tracealign_computeTraces(hmm, sq, 0, N, tr);
+  p7_tracealign_computeTraces(hmm, sq, 0, N, tr, NULL);
   p7_tracealign_Seqs(sq, tr, N, hmm->M, msaopts, hmm, &msa);
   *ret_msa = msa;
 
