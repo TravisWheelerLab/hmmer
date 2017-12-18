@@ -158,6 +158,10 @@ static ESL_OPTIONS options[] = {
     */
     { "--eentexp", eslARG_NONE,"default",NULL, NULL,    EFFOPTS,    NULL,      NULL, "adjust eff seq # to reach rel. ent. target using exp scaling",  99 },
 
+    /* expert-only option (for now), hidden from view. May not keep. */
+    { "--seq_weights_r",  eslARG_OUTFILE,FALSE, NULL, NULL,      NULL,      NULL,    NULL, "write seq weights after relative seq weighting to file <f>",   99 },
+    { "--seq_weights_e",  eslARG_OUTFILE,FALSE, NULL, NULL,      NULL,      NULL,    NULL, "write seq weights after entropy weighting to file <f>",   99 },
+
 
   {  0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 };
@@ -182,6 +186,13 @@ struct cfg_s {
 
   char         *postmsafile;	/* optional file to resave annotated, modified MSAs to  */
   FILE         *postmsafp;	/* open <postmsafile>, or NULL */
+
+  char         *seqweights_r_file;  /* optional file to write sequence weights after relative seq weighting */
+  FILE         *seqweights_r_fp;  /* open <seqweights_r_file>, or NULL */
+
+  char         *seqweights_e_file;  /* optional file to write sequence weights after entropy weighting */
+  FILE         *seqweights_e_fp;  /* open <seqweights_e_file>, or NULL */
+
 
   int           nali;		/* which # alignment this is in file (only valid in serial mode)   */
   int           nnamed;		/* number of alignments that had their own names */
@@ -426,6 +437,13 @@ main(int argc, char **argv)
   cfg.postmsafile = esl_opt_GetString(go, "-O"); /* NULL by default */
   cfg.postmsafp         = NULL;
 
+  cfg.seqweights_r_file = esl_opt_GetString(go, "--seq_weights_r"); /* NULL by default */
+  cfg.seqweights_r_fp   = NULL;
+
+  cfg.seqweights_e_file = esl_opt_GetString(go, "--seq_weights_e"); /* NULL by default */
+  cfg.seqweights_e_fp   = NULL;
+
+
   cfg.nali       = 0;		           /* this counter is incremented in masters */
   cfg.nnamed     = 0;		           /* 0 or 1 if a single MSA; == nali if multiple MSAs */
   cfg.do_mpi     = FALSE;	           /* this gets reset below, if we init MPI */
@@ -567,7 +585,23 @@ usual_master(const ESL_GETOPTS *go, struct cfg_s *cfg)
     }
 #endif
 
+  if (cfg->seqweights_r_file)
+  {
+      if (ncpus != 0)
+        p7_Fail("--seq_weights_r flag only valid with --cpu=0", NULL);
+      cfg->seqweights_r_fp = fopen(cfg->seqweights_r_file, "w");
+      if (cfg->seqweights_r_fp == NULL) p7_Fail("Failed to write sequence weight (W) file %s", cfg->seqweights_r_file);
+  }
+  else cfg->seqweights_r_fp = NULL;
 
+  if (cfg->seqweights_e_file)
+  {
+      if (ncpus != 0)
+        p7_Fail("--seq_weights_e flag only valid with --cpu=0", NULL);
+      cfg->seqweights_e_fp = fopen(cfg->seqweights_e_file, "w");
+      if (cfg->seqweights_e_fp == NULL) p7_Fail("Failed to write sequence weight (W) file %s", cfg->seqweights_e_file);
+  }
+  else cfg->seqweights_e_fp = NULL;
 
   infocnt = (ncpus == 0) ? 1 : ncpus;
   ESL_ALLOC(info, sizeof(*info) * infocnt);
@@ -997,7 +1031,7 @@ mpi_worker(const ESL_GETOPTS *go, struct cfg_s *cfg)
         sq = NULL;
         hmm->eff_nseq = 1;
       } else {
-        if ((status = p7_Builder(bld, msa, bg, &hmm, NULL, NULL, NULL, postmsa_ptr)) != eslOK) { strcpy(errmsg, bld->errbuf); goto ERROR; }
+        if ((status = p7_Builder(bld, msa, bg, &hmm, NULL, NULL, NULL, postmsa_ptr, NULL, NULL)) != eslOK) { strcpy(errmsg, bld->errbuf); goto ERROR; }
       }
 
 
@@ -1074,7 +1108,7 @@ serial_loop(WORKER_INFO *info, struct cfg_s *cfg, const ESL_GETOPTS *go)
         sq = NULL;
         hmm->eff_nseq = 1;
       } else {
-        if ((status = p7_Builder(info->bld, msa, info->bg, &hmm, NULL, NULL, NULL, postmsa_ptr )) != eslOK) p7_Fail("build failed: %s", bld->errbuf);
+        if ((status = p7_Builder(info->bld, msa, info->bg, &hmm, NULL, NULL, NULL, postmsa_ptr, cfg->seqweights_r_fp,  cfg->seqweights_e_fp )) != eslOK) p7_Fail("build failed: %s", bld->errbuf);
 
         //if not --singlemx, but the user set the popen/pextend flags, override the computed gap params now:
         if (info->bld->popen != -1 || info->bld->pextend != -1) {
@@ -1268,7 +1302,7 @@ pipeline_thread(void *arg)
         sq = NULL;
         item->hmm->eff_nseq = 1;
       } else {
-        status = p7_Builder(info->bld, item->msa, info->bg, &item->hmm, NULL, NULL, NULL, &item->postmsa);
+        status = p7_Builder(info->bld, item->msa, info->bg, &item->hmm, NULL, NULL, NULL, &item->postmsa, NULL, NULL);
         if (status != eslOK) p7_Fail("build failed: %s", info->bld->errbuf);
 
         //if not --singlemx, but the user set the popen/pextend flags, override the computed gap params now:
