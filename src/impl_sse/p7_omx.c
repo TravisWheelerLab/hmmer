@@ -53,7 +53,7 @@
  *            that need the whole DP matrix for traceback, sampling,
  *            posterior decoding, or reestimation, <allocM=M> and
  *            <allocL=allocXL=L>.
- *
+ *p7_omx_Create
  * Returns:   a pointer to the new <P7_OMX>.
  *
  * Throws:    <NULL> on allocation failure.
@@ -81,7 +81,93 @@ p7_omx_Create(int allocM, int allocL, int allocXL)
   ox->allocQ16 = p7O_NQB(allocM);
   ox->ncells   = ox->allocR * ox->allocQ4 * 4;      /* # of DP cells allocated, where 1 cell contains MDI */
 
-  ESL_ALLOC(ox->dp_mem, sizeof(__m128) * ox->allocR * ox->allocQ4 * p7X_NSCELLS + 15);  /* floats always dominate; +15 for alignment */
+  ESL_ALLOC(ox->dp_mem, sizeof(__m128) * ox->allocR * ox->allocQ4 * p7X_NSCELLS_FS + 15);  /* floats always dominate; +15 for alignment */
+  ESL_ALLOC(ox->dpb,    sizeof(__m128i *) * ox->allocR);
+  ESL_ALLOC(ox->dpw,    sizeof(__m128i *) * ox->allocR);
+  ESL_ALLOC(ox->dpf,    sizeof(__m128  *) * ox->allocR);
+
+  ox->dpb[0] = (__m128i *) ( ( (unsigned long int) ((char *) ox->dp_mem + 15) & (~0xf)));
+  ox->dpw[0] = (__m128i *) ( ( (unsigned long int) ((char *) ox->dp_mem + 15) & (~0xf)));
+  ox->dpf[0] = (__m128  *) ( ( (unsigned long int) ((char *) ox->dp_mem + 15) & (~0xf)));
+
+  for (i = 1; i <= allocL; i++) {
+    ox->dpf[i] = ox->dpf[0] + i * ox->allocQ4  * p7X_NSCELLS_FS;
+    ox->dpw[i] = ox->dpw[0] + i * ox->allocQ8  * p7X_NSCELLS;
+    ox->dpb[i] = ox->dpb[0] + i * ox->allocQ16;
+  }
+
+  ox->allocXR = allocXL+1;
+  ESL_ALLOC(ox->x_mem,  sizeof(float) * ox->allocXR * p7X_NXCELLS + 15); 
+  ox->xmx = (float *) ( ( (unsigned long int) ((char *) ox->x_mem  + 15) & (~0xf)));
+
+  ox->M              = 0;
+  ox->L              = 0;
+  ox->totscale       = 0.0;
+  ox->has_own_scales = TRUE;	/* most matrices are Forward, control their own scale factors */
+#if eslDEBUGLEVEL > 0
+  ox->debugging = FALSE;
+  ox->dfp       = NULL;
+#endif
+  return ox;
+
+ ERROR:
+  p7_omx_Destroy(ox);
+  return NULL;
+}
+
+
+/* Function:  p7_omx_fs_Create()
+ * Synopsis:  Create an optimized dynamic programming matrix.
+ * Incept:    SRE, Tue Nov 27 08:48:20 2007 [Janelia]
+ *
+ * Purpose:   Allocates a reusable, resizeable <P7_OMX> for models up to
+ *            size <allocM> and target sequences up to length
+ *            <allocL/allocXL>, for use by any of the various optimized
+ *            DP routines.
+ *            
+ *            To allocate the very memory-efficient one-row matrix
+ *            used by *Filter() and *Score() functions that only
+ *            calculate scores, <allocM=M>, <allocL=0>, and
+ *            <allocXL=0>.
+ *            
+ *            To allocate the reasonably memory-efficient linear
+ *            arrays used by *Parser() functions that only keep
+ *            special (X) state scores, <allocM=M>, <allocL=0>,
+ *            and <allocXL=L>.
+ *            
+ *            To allocate a complete matrix suitable for functions
+ *            that need the whole DP matrix for traceback, sampling,
+ *            posterior decoding, or reestimation, <allocM=M> and
+ *            <allocL=allocXL=L>.
+ *
+ * Returns:   a pointer to the new <P7_OMX>.
+ *
+ * Throws:    <NULL> on allocation failure.
+ */
+P7_OMX *
+p7_omx_fs_Create(int allocM, int allocL, int allocXL)
+{
+  P7_OMX  *ox     = NULL;
+  int      i;
+  int      status;
+
+  ESL_ALLOC(ox, sizeof(P7_OMX));
+  ox->dp_mem = NULL;
+  ox->dpb    = NULL;
+  ox->dpw    = NULL;
+  ox->dpf    = NULL;
+  ox->xmx    = NULL;
+  ox->x_mem  = NULL;
+
+  /* DP matrix will be allocated for allocL+1 rows 0,1..L; allocQ4*p7X_NSCELLS columns */
+  ox->allocR   = allocL+1;
+  ox->validR   = ox->allocR;
+  ox->allocQ4  = p7O_NQF(allocM);
+  ox->allocQ8  = p7O_NQW(allocM);
+  ox->allocQ16 = p7O_NQB(allocM);
+  ox->ncells   = ox->allocR * ox->allocQ4 * 4;      /* # of DP cells allocated, where 1 cell contains MDI */
+
+  ESL_ALLOC(ox->dp_mem, sizeof(__m128) * ox->allocR * ox->allocQ4 * p7X_NSCELLS_FS + 15);  /* floats always dominate; +15 for alignment */
   ESL_ALLOC(ox->dpb,    sizeof(__m128i *) * ox->allocR);
   ESL_ALLOC(ox->dpw,    sizeof(__m128i *) * ox->allocR);
   ESL_ALLOC(ox->dpf,    sizeof(__m128  *) * ox->allocR);
@@ -114,6 +200,8 @@ p7_omx_Create(int allocM, int allocL, int allocXL)
   p7_omx_Destroy(ox);
   return NULL;
 }
+
+
 
 /* Function:  p7_omx_GrowTo()
  * Synopsis:  Assure that a DP matrix is big enough.

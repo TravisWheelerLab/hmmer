@@ -154,6 +154,7 @@ p7_oprofile_Create(int allocM, const ESL_ALPHABET *abc)
   return NULL;
 }
 
+
 /* Function:  p7_oprofile_IsLocal()
  * Synopsis:  Returns TRUE if profile is in local alignment mode.
  * Incept:    SRE, Sat Aug 16 08:46:00 2008 [Janelia]
@@ -946,6 +947,7 @@ fb_conversion(const P7_PROFILE *gm, P7_OPROFILE *om)
   for (x = 0; x < gm->abc->Kp; x++)
     for (k = 1, q = 0; q < nq; q++, k++)
       {
+			  \
 	for (z = 0; z < 4; z++) tmp.x[z] = (k+ z*nq <= M) ? p7P_MSC(gm, k+z*nq, x) : -eslINFINITY;
 	om->rfv[x][q] = esl_sse_expf(tmp.v);
       }
@@ -992,6 +994,80 @@ fb_conversion(const P7_PROFILE *gm, P7_OPROFILE *om)
 
   return eslOK;
 }
+
+/* fb_fs_conversion()
+ * This builds the Forward/Backward part of the optimized profile <om>,
+ * where we use odds ratios (not log-odds scores).
+ */
+static int
+fb_fs_conversion(const P7_PROFILE *gm, P7_OPROFILE *om)
+{
+  int     M   = gm->M;		/* length of the query                                          */
+  int     nq  = p7O_NQF(M);     /* segment length; total # of vectors needed            */
+  int     x;			/* counter over residues                                        */
+  int     q;			/* q counts over total # of vectors, 0..nq-1            */
+  int     k;			/* the usual counter over model nodes 1..M                      */
+  int     kb;			/* possibly offset base k for loading om's TSC vectors          */
+  int     z;			/* counter within elements of one SIMD minivector               */
+  int     t;			/* counter over transitions 0..7 = p7O_{BM,MM,IM,DM,MD,MI,II,DD}*/
+  int     tg;			/* transition index in gm                                       */
+  int     j;			/* counter in interleaved vector arrays in the profile          */
+  union { __m128 v; float x[4]; } tmp; /* used to align and load simd minivectors               */
+
+  if (nq > om->allocQ4) ESL_EXCEPTION(eslEINVAL, "optimized profile is too small to hold conversion");
+
+  /* striped match scores: start at k=1 */
+  for (x = 0; x < gm->abc->Kp; x++)
+    for (k = 1, q = 0; q < nq; q++, k+=4)
+      {
+			  \
+	for (z = 0; z < 4; z++) tmp.x[z] = (k+z <= M) ? p7P_MSC(gm, k+z , x) : -eslINFINITY;
+	om->rfv[x][q] = esl_sse_expf(tmp.v);
+      }
+
+
+  /* Transition scores, all but the DD's. */
+  for (j = 0, k = 1, q = 0; q < nq; q++, k+=4)
+    {
+      for (t = p7O_BM; t <= p7O_II; t++) /* this loop of 7 transitions depends on the order in the definition of p7o_tsc_e */
+	{
+	  switch (t) {
+	  case p7O_BM: tg = p7P_BM;  kb = k-1; break; /* gm has tBMk stored off by one! start from k=0 not 1 */
+	  case p7O_MM: tg = p7P_MM;  kb = k-1; break; /* MM, DM, IM quads are rotated by -1, start from k=0  */
+	  case p7O_IM: tg = p7P_IM;  kb = k-1; break;
+	  case p7O_DM: tg = p7P_DM;  kb = k-1; break;
+	  case p7O_MD: tg = p7P_MD;  kb = k;   break; /* the remaining ones are straight up  */
+	  case p7O_MI: tg = p7P_MI;  kb = k;   break; 
+	  case p7O_II: tg = p7P_II;  kb = k;   break; 
+	  }
+
+	  for (z = 0; z < 4; z++) tmp.x[z] = (kb+z < M) ? p7P_TSC(gm, kb+z, tg) : -eslINFINITY;
+	  om->tfv[j++] = esl_sse_expf(tmp.v);
+	}
+    }
+
+  /* And finally the DD's, which are at the end of the optimized tfv vector; (j is already there) */
+  for (k = 1, q = 0; q < nq; q++, k++)
+    {
+      for (z = 0; z < 4; z++) tmp.x[z] = (k+z < M) ? p7P_TSC(gm, k+z, p7P_DD) : -eslINFINITY;
+      om->tfv[j++] = esl_sse_expf(tmp.v);
+    }
+
+  /* Specials. (These are actually in exactly the same order in om and
+   *  gm, but we copy in general form anyway.)
+   */
+  om->xf[p7O_E][p7O_LOOP] = expf(gm->xsc[p7P_E][p7P_LOOP]);  
+  om->xf[p7O_E][p7O_MOVE] = expf(gm->xsc[p7P_E][p7P_MOVE]);
+  om->xf[p7O_N][p7O_LOOP] = expf(gm->xsc[p7P_N][p7P_LOOP]);
+  om->xf[p7O_N][p7O_MOVE] = expf(gm->xsc[p7P_N][p7P_MOVE]);
+  om->xf[p7O_C][p7O_LOOP] = expf(gm->xsc[p7P_C][p7P_LOOP]);
+  om->xf[p7O_C][p7O_MOVE] = expf(gm->xsc[p7P_C][p7P_MOVE]);
+  om->xf[p7O_J][p7O_LOOP] = expf(gm->xsc[p7P_J][p7P_LOOP]);
+  om->xf[p7O_J][p7O_MOVE] = expf(gm->xsc[p7P_J][p7P_MOVE]);
+
+  return eslOK;
+}
+
 
 
 /* Function:  p7_oprofile_Convert()
@@ -1043,6 +1119,64 @@ p7_oprofile_Convert(const P7_PROFILE *gm, P7_OPROFILE *om)
   for (z = 0; z < p7_NCUTOFFS; z++) om->cutoff[z]  = gm->cutoff[z];
   for (z = 0; z < p7_MAXABET;  z++) om->compo[z]   = gm->compo[z];
 
+  return eslOK;
+
+ ERROR:
+  return status;
+}
+
+/* Function:  p7_oprofile_fs_Convert()
+ * Synopsis:  Converts standard profile to an optimized.
+ * 			  Converts forward info in non-striped fashion.
+ *
+ * Incept:    SRE, Mon Nov 26 07:38:57 2007 [Janelia]
+ *
+ * Purpose:   Convert a standard profile <gm> to an optimized profile <om>,
+ *            where <om> has already been allocated for a profile of at 
+ *            least <gm->M> nodes and the same emission alphabet <gm->abc>.
+ *
+ * Args:      gm - profile to optimize
+ *            om - allocated optimized profile for holding the result.
+ *
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    <eslEINVAL> if <gm>, <om> aren't compatible. 
+ *            <eslEMEM> on allocation failure.
+ */
+int
+p7_oprofile_fs_Convert(const P7_PROFILE *gm, P7_OPROFILE *om)
+{
+  int status, z;
+
+  /* Set these first so they are available in the following calls */
+  om->mode       = gm->mode;
+  om->L          = gm->L;
+  om->M          = gm->M;
+  om->nj         = gm->nj;
+  om->max_length = gm->max_length;
+
+  if (gm->abc->type != om->abc->type)  ESL_EXCEPTION(eslEINVAL, "alphabets of the two profiles don't match");  
+  if (gm->M         >  om->allocM)     ESL_EXCEPTION(eslEINVAL, "oprofile is too small");  
+
+  if ((status =  mf_conversion(gm, om)) != eslOK) return status;   /* MSVFilter()'s information     */
+  if ((status =  vf_conversion(gm, om)) != eslOK) return status;   /* ViterbiFilter()'s information */
+  if ((status =  fb_fs_conversion(gm, om)) != eslOK) return status;   /* ForwardFilter()'s information */
+
+  if (om->name != NULL) free(om->name);
+  if (om->acc  != NULL) free(om->acc);
+  if (om->desc != NULL) free(om->desc);
+  if ((status = esl_strdup(gm->name, -1, &(om->name))) != eslOK) goto ERROR;
+  if ((status = esl_strdup(gm->acc,  -1, &(om->acc)))  != eslOK) goto ERROR;
+  if ((status = esl_strdup(gm->desc, -1, &(om->desc))) != eslOK) goto ERROR;
+  strcpy(om->rf,        gm->rf);
+  strcpy(om->mm,        gm->mm);
+  strcpy(om->cs,        gm->cs);
+  strcpy(om->consensus, gm->consensus);
+  for (z = 0; z < p7_NEVPARAM; z++) om->evparam[z] = gm->evparam[z];
+  for (z = 0; z < p7_NCUTOFFS; z++) om->cutoff[z]  = gm->cutoff[z];
+  for (z = 0; z < p7_MAXABET;  z++) om->compo[z]   = gm->compo[z];
+
+  if (om->name != NULL) free(om->name);
   return eslOK;
 
  ERROR:

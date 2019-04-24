@@ -167,6 +167,22 @@ p7_oprofile_FGetEmission(const P7_OPROFILE *om, int k, int x)
 enum p7x_scells_e { p7X_M = 0, p7X_D = 1, p7X_I = 2 };
 #define p7X_NSCELLS 3
 
+enum p7x_codons_e {
+  p7X_C0 = 0,
+  p7X_C1 = 3,
+  p7X_C2 = 4,
+  p7X_C3 = 5,
+  p7X_C4 = 6,
+  p7X_C5 = 7,
+};
+#define p7X_NSCELLS_FS 8
+
+#define p7X_CODONS 5
+
+enum p7x_i_values { p7X_IVM = 0, p7X_IVD = 1, p7X_IVI = 2, p7X_IVS = 3 };
+
+#define p7X_IVALUES 4
+
 /* Besides ENJBC states, we may also store a rescaling factor on each row  */
 enum p7x_xcells_e { p7X_E = 0, p7X_N = 1, p7X_J = 2, p7X_B = 3, p7X_C = 4, p7X_SCALE = 5 }; 
 #define p7X_NXCELLS 6
@@ -223,6 +239,10 @@ typedef struct p7_omx_s {
 #define DMO(dp,q) ((dp)[(q) * p7X_NSCELLS + p7X_D])
 #define IMO(dp,q) ((dp)[(q) * p7X_NSCELLS + p7X_I])
 
+#define MMO_FS(dp,q,c) ((dp)[(q) * p7X_NSCELLS_FS + p7X_M + (c)])
+#define DMO_FS(dp,q) ((dp)[(q) * p7X_NSCELLS_FS + p7X_D])
+#define IMO_FS(dp,q) ((dp)[(q) * p7X_NSCELLS_FS + p7X_I])
+
 static inline float
 p7_omx_FGetMDI(const P7_OMX *ox, int s, int i, int k)
 {
@@ -256,6 +276,7 @@ p7_omx_FSetMDI(const P7_OMX *ox, int s, int i, int k, float val)
 
 /* p7_omx.c */
 extern P7_OMX      *p7_omx_Create(int allocM, int allocL, int allocXL);
+extern P7_OMX      *p7_omx_fs_Create(int allocM, int allocL, int allocXL);
 extern int          p7_omx_GrowTo(P7_OMX *ox, int allocM, int allocL, int allocXL);
 extern int          p7_omx_FDeconvert(P7_OMX *ox, P7_GMX *gx);
 extern int          p7_omx_Reuse  (P7_OMX *ox);
@@ -281,6 +302,7 @@ extern int          p7_oprofile_UpdateMSVEmissionScores(P7_OPROFILE *om, P7_BG *
 
 
 extern int          p7_oprofile_Convert(const P7_PROFILE *gm, P7_OPROFILE *om);
+extern int          p7_oprofile_fs_Convert(const P7_PROFILE *gm, P7_OPROFILE *om);
 extern int          p7_oprofile_ReconfigLength    (P7_OPROFILE *om, int L);
 extern int          p7_oprofile_ReconfigMSVLength (P7_OPROFILE *om, int L);
 extern int          p7_oprofile_ReconfigRestLength(P7_OPROFILE *om, int L);

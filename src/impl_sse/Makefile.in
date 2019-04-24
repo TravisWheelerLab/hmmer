@@ -33,7 +33,8 @@ MYINCDIRS      = -I../../${ESLDIR} \
 
 OBJS =  decoding.o\
 	fwdback.o\
-	io.o\
+	fwd_frameshift.o\
+    io.o\
 	ssvfilter.o\
 	msvfilter.o\
 	null2.o\
