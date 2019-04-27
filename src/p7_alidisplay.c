@@ -164,8 +164,6 @@ p7_alidisplay_Create(const P7_TRACE *tr, int which, const P7_OPROFILE *om, const
   ad->sqto    = tr->i[z2];		 
   ad->L       = sq->n;
   
-  ad->frameshifts = -1;
-
   /* optional rf line */
   if (ad->rfline != NULL) {
     for (z = z1; z <= z2; z++) ad->rfline[z-z1] = ((tr->st[z] == p7T_I) ? '.' : om->rf[tr->k[z]]);

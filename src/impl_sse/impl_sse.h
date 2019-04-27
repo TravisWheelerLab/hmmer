@@ -330,6 +330,7 @@ extern int p7_Forward       (const ESL_DSQ *dsq, int L, const P7_OPROFILE *om,  
 extern int p7_ForwardParser (const ESL_DSQ *dsq, int L, const P7_OPROFILE *om,                    P7_OMX *fwd, float *opt_sc);
 extern int p7_Backward      (const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, const P7_OMX *fwd, P7_OMX *bck, float *opt_sc);
 extern int p7_BackwardParser(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, const P7_OMX *fwd, P7_OMX *bck, float *opt_sc);
+extern int p7_Forward_Frameshift_SIMD(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float **emit_sc, float *opt_sc);
 
 /* io.c */
 extern int p7_oprofile_Write(FILE *ffp, FILE *pfp, P7_OPROFILE *om);

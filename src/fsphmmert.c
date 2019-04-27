@@ -762,7 +762,7 @@ serial_loop(WORKER_INFO *info, ID_LENGTH_LIST *id_length_list, ESL_SQFILE *dbfp,
          esl_sq_ReverseComplement(dbsq_dna);
       } 
       wstatus = esl_sqio_ReadWindow(dbfp, info->om->max_length, info->pli->block_length, dbsq_dna);
-      
+     //max length * 3 
       if (wstatus == eslEOD) { // no more left of this sequence ... move along to the next sequence.
           add_id_length(id_length_list, dbsq_dna->idx, dbsq_dna->L);
           info->pli->nseqs++;

@@ -2169,6 +2169,7 @@ p7_pli_postViterbi_Frameshift(P7_PIPELINE *pli, P7_PROFILE *gm, P7_BG *bg, ESL_G
   int F3_L = ESL_MIN( window_len,  pli->B3);
   float	           indel_cost = 0.01;
   int i;
+  
   if(dnasq->end < dnasq->start) {
 	 	  subseq = dnasq->dsq + window_start;
   } else {
@@ -2177,11 +2178,24 @@ p7_pli_postViterbi_Frameshift(P7_PIPELINE *pli, P7_PROFILE *gm, P7_BG *bg, ESL_G
    
  //printf("START %d\n", window_start); 
   p7_ReconfigLength_Frameshift(gm, window_len);
+  
   emit_sc = Codon_Emissions_Create(gm->rsc, subseq, gcode, gm->M, window_len, indel_cost);
+  
   p7_gmx_fs_GrowTo(pli->gxf, gm->M, window_len);
 //printf("FORWARD\n");
   /* Parse with Forward and obtain its real Forward score. */
+  
   p7_Forward_Frameshift(subseq, window_len, gm, pli->gxf, emit_sc, &fwdsc);
+printf("fwdsc %f\n", fwdsc);
+
+ P7_OMX *oxf = p7_omx_fs_Create(gm->M, window_len, window_len);
+ P7_OPROFILE *om = p7_oprofile_Create(gm->M, gm->abc);
+ p7_oprofile_fs_Convert(gm, om);
+
+ p7_Forward_Frameshift_SIMD(subseq, window_len, om, oxf, emit_sc, &fwdsc);
+
+ printf("SIMD fwdsc %f\n", fwdsc);
+
 
   //TODO: figure out translated filterscore
 #if 0
@@ -2225,17 +2239,20 @@ p7_pli_postViterbi_Frameshift(P7_PIPELINE *pli, P7_PROFILE *gm, P7_BG *bg, ESL_G
    * In this case "domains" will end up being translated as independent "hits" */
   p7_gmx_GrowTo(pli->gxb, gm->M, window_len);
 //printf("BOACKWARD\n");  
+  
   p7_Backward_Frameshift(subseq, window_len, gm, pli->gxb, emit_sc, NULL);
   //if we're asked to not do null correction, pass a NULL instead of a temp scores variable - domaindef knows what to do
 //printf("DOMAIN DEF\n");
 //printf("START %d LEN %d\n", window_start, window_len); 
-   status = p7_domaindef_ByPosteriorHeuristics_Frameshift(pli_tmp->tmpseq, dnasq, gm, 
+  
+  status = p7_domaindef_ByPosteriorHeuristics_Frameshift(pli_tmp->tmpseq, dnasq, gm, 
 							 pli->gxf,pli->gxb, pli->gfwd, pli->gbck,
 							 pli->ddef, bg, TRUE,pli_tmp->bg, 
 							 (pli->do_null2?pli_tmp->scores:NULL), 
 							 pli_tmp->fwd_emissions_arr, emit_sc, 
 							 gcode, indel_cost);
 //printf("POST PROCESS\n");
+  
   if(emit_sc != NULL) Codon_Emissions_Destroy(emit_sc);
   if (status != eslOK) ESL_FAIL(status, pli->errbuf, "domain definition workflow failure"); /* eslERANGE can happen */
   if (pli->ddef->nregions   == 0)  return eslOK; /* score passed threshold but there's no discrete domains here       */
@@ -2351,7 +2368,7 @@ p7_pli_postViterbi_Frameshift(P7_PIPELINE *pli, P7_PROFILE *gm, P7_BG *bg, ESL_G
        * count reported domains.
        */
       hit->dcl         = pli->ddef->dcl;
-      pli->ddef->dcl   = NULL;
+	  pli->ddef->dcl   = NULL;
       p7_domaindef_Reuse(pli->ddef);
       hit->best_domain = 0;
       hit->seqidx = seqidx;
@@ -2361,7 +2378,9 @@ p7_pli_postViterbi_Frameshift(P7_PIPELINE *pli, P7_PROFILE *gm, P7_BG *bg, ESL_G
         Ld = hit->dcl[d].jenv - hit->dcl[d].ienv + 1;
         hit->dcl[d].bitscore = hit->dcl[d].envsc + (dnasq->n-Ld) * log((float) dnasq->n / (float) (dnasq->n+3)); /* NATS, for the moment... */
         hit->dcl[d].dombias  = (pli->do_null2 ? p7_FLogsum(0.0, log(bg->omega) + hit->dcl[d].domcorrection) : 0.0); /* NATS, and will stay so */
-        hit->dcl[d].bitscore = (hit->dcl[d].bitscore - (nullsc + hit->dcl[d].dombias)) / eslCONST_LOG2; /* now BITS, as it should be */
+        
+        printf("hit->dcl[0].dombias %f, ndom %d \n", hit->dcl[0].dombias, hit->ndom);
+		hit->dcl[d].bitscore = (hit->dcl[d].bitscore - (nullsc + hit->dcl[d].dombias)) / eslCONST_LOG2; /* now BITS, as it should be */
         hit->dcl[d].lnP      = esl_exp_logsurv (hit->dcl[d].bitscore,  gm->evparam[p7_FTAU], gm->evparam[p7_FLAMBDA]);
 
         if (hit->dcl[d].bitscore > hit->dcl[hit->best_domain].bitscore) hit->best_domain = d;
@@ -2529,9 +2548,11 @@ p7_pli_postMSV_Frameshift(P7_PIPELINE *pli, P7_OPROFILE *om, P7_BG *bg,
       if (P > pli->F1) return eslOK;
     }
   else filtersc = nullsc;
+  
   pli->n_past_bias++; 
   pli->pos_past_bias += orfsq->n * 3;
   /* Second level filter: ViterbiFilter(), multihit with <om> */
+  
   p7_omx_GrowTo(pli->oxf, om->M, 0, orfsq->n);
 //printf("VIT FILTER\n");
   p7_ViterbiFilter_longtarget(orfsq->dsq, orfsq->n, om, pli->oxf, filtersc, pli->F2, vit_windowlist);
@@ -2659,23 +2680,30 @@ p7_Pipeline_Frameshift(P7_PIPELINE *pli, P7_OPROFILE *om, P7_PROFILE *gm,
          p7_bg_NullOne  (bg, orfsq->dsq, orfsq->n, &nullsc);
          p7_omx_GrowTo(pli->oxf, om->M, 0, orfsq->n);    /* expand the one-row omx if needed */
 //printf("MSV FILTER\n");
-         p7_MSVFilter(orfsq->dsq, orfsq->n, om, pli->oxf, &usc);
-         P = esl_gumbel_surv( (usc-nullsc)/eslCONST_LOG2,  om->evparam[p7_MMU],  om->evparam[p7_MLAMBDA]);
+        
+		 p7_MSVFilter(orfsq->dsq, orfsq->n, om, pli->oxf, &usc);
+        
+		 P = esl_gumbel_surv( (usc-nullsc)/eslCONST_LOG2,  om->evparam[p7_MMU],  om->evparam[p7_MLAMBDA]);
          if (P > pli->F1 ) continue;
          pli->n_past_msv++;
          pli->pos_past_msv += orfsq->n * 3;
 
          if (data->prefix_lengths == NULL)  //otherwise, already filled in
-            p7_hmm_ScoreDataComputeRest(om, data);
-	     status = p7_pli_postMSV_Frameshift(pli, om, bg, data, orfsq, nullsc, usc, &vit_windowlist);	  
+            
+		 p7_hmm_ScoreDataComputeRest(om, data);
+	     
+		 status = p7_pli_postMSV_Frameshift(pli, om, bg, data, orfsq, nullsc, usc, &vit_windowlist);	  
 	  }
 
 	for(j = 0; j < vit_windowlist.count; ++j) {
         window = vit_windowlist.windows+j;
-	  	p7_hmmwindow_new(&post_vit_windowlist, window->id, window->n, window->fm_n, window->k, 
+	
+		p7_hmmwindow_new(&post_vit_windowlist, window->id, window->n, window->fm_n, window->k, 
 			window->length, window->score, p7_NOCOMPLEMENT, window->target_len);       
-	esl_sq_Copy(orfsq, &(post_vit_orf_block->list[post_vit_orf_block->count]));
-	  post_vit_orf_block->count++;
+	
+		esl_sq_Copy(orfsq, &(post_vit_orf_block->list[post_vit_orf_block->count]));
+	  
+		post_vit_orf_block->count++;
 
 	} 
       esl_sq_Reuse(orfsq);
