@@ -337,6 +337,7 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, __
   __m128 *dpp;                     /* previous row, for use in {MDI}MO(dpp,q) access macro      */
   __m128 *rp;			   /* will point at om->rfv[x] for residue x[i]                 */
   __m128 *tp;			   /* will point into (and step thru) om->tfv                   */
+  __m128 *tivv;
   __m128 *ivv_mem;	/* will point to intermiediate values to be reused in subsequent rows */ 
   __m128 **ivv;
 
@@ -433,8 +434,10 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, __
 	  ddv = zerov;
 
 	  /* Move intermediate value pointers so that i-4 becomes i-5, i-3 becomes i-4, etc. */
-	  for(c = 1; c < p7X_CODONS; c++)
+      tivv = ivv[p7P_C5];
+	  for(c = p7X_CODONS; c < p7P_C1; c--)
 	    ivv[c-1] = ivv[c];
+      ivv[c] = tivv;
 
 	  for (q = 0; q < Q; q++)
     {	
@@ -452,16 +455,17 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, __
 	  bpv = _mm_mul_ps(xBv, *tp); tp++;
 	  
 	  /* M->M, I->M & D->M values */
-	  ivv[4][q] =            _mm_mul_ps(mpv, *tp); tp++;
-	  ivv[4][q] = _mm_add_ps(_mm_mul_ps(ipv, *tp), ivv[4][q]); tp++;
-	  ivv[4][q] = _mm_add_ps(_mm_mul_ps(dpv, *tp), ivv[4][q]); tp++;
+	  ivv[p7P_C1][q] =            _mm_mul_ps(mpv, *tp); tp++;
+	  ivv[p7P_C1][q] = _mm_add_ps(_mm_mul_ps(ipv, *tp), ivv[p7P_C1][q]); tp++;
+	  ivv[p7P_C1][q] = _mm_add_ps(_mm_mul_ps(dpv, *tp), ivv[p7P_C1][q]); tp++;
 
 	  /* combine intermeiate values with emittions probablities for 5 codon types */
-	  MMO_FS(dpc,q,p7X_C1) = _mm_mul_ps(ivv[4][q], rp[q+p7P_C1]);
-	  MMO_FS(dpc,q,p7X_C2) = _mm_mul_ps(ivv[3][q], rp[q+p7P_C2]);
-   	  MMO_FS(dpc,q,p7X_C3) = _mm_mul_ps(ivv[2][q], rp[q+p7P_C3]);
-	  MMO_FS(dpc,q,p7X_C4) = _mm_mul_ps(ivv[1][q], rp[q+p7P_C4]);
-      MMO_FS(dpc,q,p7X_C5) = _mm_mul_ps(ivv[0][q], rp[q+p7P_C5]);
+	  MMO_FS(dpc,q,p7X_C1) = _mm_mul_ps(ivv[p7P_C1][q], rp[q+p7P_C1]);
+
+	  MMO_FS(dpc,q,p7X_C2) = _mm_mul_ps(ivv[p7P_C2][q], rp[q+p7P_C2]);
+   	  MMO_FS(dpc,q,p7X_C3) = _mm_mul_ps(ivv[p7P_C3][q], rp[q+p7P_C3]);
+	  MMO_FS(dpc,q,p7X_C4) = _mm_mul_ps(ivv[p7P_C4][q], rp[q+p7P_C4]);
+      MMO_FS(dpc,q,p7X_C5) = _mm_mul_ps(ivv[p7P_C5][q], rp[q+p7P_C5]);
      
 	  /* combine 5 codon types and B->M probablity to get total match state probability */
       MMO_FS(dpc,q,p7X_C0) = _mm_mul_ps(bpv, rp[q+p7P_C3]);
