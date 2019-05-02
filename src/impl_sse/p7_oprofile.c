@@ -1176,7 +1176,6 @@ p7_oprofile_fs_Convert(const P7_PROFILE *gm, P7_OPROFILE *om)
   for (z = 0; z < p7_NCUTOFFS; z++) om->cutoff[z]  = gm->cutoff[z];
   for (z = 0; z < p7_MAXABET;  z++) om->compo[z]   = gm->compo[z];
 
-  if (om->name != NULL) free(om->name);
   return eslOK;
 
  ERROR:

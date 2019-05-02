@@ -179,10 +179,6 @@ enum p7x_codons_e {
 
 #define p7X_CODONS 5
 
-enum p7x_i_values { p7X_IVM = 0, p7X_IVD = 1, p7X_IVI = 2, p7X_IVS = 3 };
-
-#define p7X_IVALUES 4
-
 /* Besides ENJBC states, we may also store a rescaling factor on each row  */
 enum p7x_xcells_e { p7X_E = 0, p7X_N = 1, p7X_J = 2, p7X_B = 3, p7X_C = 4, p7X_SCALE = 5 }; 
 #define p7X_NXCELLS 6
@@ -233,6 +229,10 @@ typedef struct p7_omx_s {
 #define DMXo(q)   (dp[(q) * p7X_NSCELLS + p7X_D])
 #define IMXo(q)   (dp[(q) * p7X_NSCELLS + p7X_I])
 #define XMXo(i,s) (xmx[(i) * p7X_NXCELLS + s])
+
+#define MMXo_FS(q,c)   (dp[(q) * p7X_NSCELLS_FS + p7X_M + (c)])
+#define DMXo_FS(q)   (dp[(q) * p7X_NSCELLS_FS + p7X_D])
+#define IMXo_FS(q)   (dp[(q) * p7X_NSCELLS_FS + p7X_I])
 
 /* and this version works with a ptr to the approp DP row. */
 #define MMO(dp,q) ((dp)[(q) * p7X_NSCELLS + p7X_M])
@@ -330,7 +330,7 @@ extern int p7_Forward       (const ESL_DSQ *dsq, int L, const P7_OPROFILE *om,  
 extern int p7_ForwardParser (const ESL_DSQ *dsq, int L, const P7_OPROFILE *om,                    P7_OMX *fwd, float *opt_sc);
 extern int p7_Backward      (const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, const P7_OMX *fwd, P7_OMX *bck, float *opt_sc);
 extern int p7_BackwardParser(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, const P7_OMX *fwd, P7_OMX *bck, float *opt_sc);
-extern int p7_Forward_Frameshift_SIMD(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float **emit_sc, float *opt_sc);
+extern int p7_Forward_Frameshift_SIMD(const ESL_DSQ *dsq, int L, P7_OPROFILE *om, P7_OMX *ox, float **emit_sc, float *opt_sc);
 
 /* io.c */
 extern int p7_oprofile_Write(FILE *ffp, FILE *pfp, P7_OPROFILE *om);

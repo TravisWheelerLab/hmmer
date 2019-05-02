@@ -152,47 +152,44 @@ p7_Forward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *g
       = MMX_FS(i,k,p7G_C4) = MMX_FS(i,k,p7G_C5) = IMX_FS(i,k) = DMX_FS(i,k) = -eslINFINITY;
     }
   }	
-
   /* Recursion. Done as a pull.
    * Note some slightly wasteful boundary conditions:  
    *    tsc[0] = impossible for all eight transitions (no node 0)
    *    D_1 is wastefully calculated (doesn't exist)
    */
   for (i = 3; i <= L; i++) 
-  {   
+  {  
 	  rsc = emit_sc[i];
 
       MMX_FS(i,0,p7G_C0) = MMX_FS(i,0,p7G_C1) = MMX_FS(i,0,p7G_C2) = MMX_FS(i,0,p7G_C3)      
       = MMX_FS(i,0,p7G_C4) = MMX_FS(i,0,p7G_C5) = IMX_FS(i,0) = DMX_FS(i,0) = -eslINFINITY;
      
       XMX_FS(i, p7G_E) = -eslINFINITY;
-     
 	  tiv = iv[p7P_C5];
-	  for(c = p7P_CODONS; c > p7P_C1; c--)
-	    iv[c-1] = iv[c];
+	  for(c = p7P_C5; c > p7P_C1; c--) 
+             iv[c-1] = iv[c];
 	  iv[c] = tiv;
 
 	  for (k = 1; k < M; k++)
-	{
+	{ 
 	  iv[p7P_C1][k] = p7_FLogsum(MMX_FS(i-1,k-1,p7G_C0),
 			           p7_FLogsum(IMX_FS(i-1,k-1),        DMX_FS(i-1,k-1)));
 
 	  MMX_FS(i,k,p7G_C1) = iv[p7P_C1][k] + MSC_FS(k,p7P_C1);
  	  
 	  MMX_FS(i,k,p7G_C2) = iv[p7P_C2][k] + MSC_FS(k,p7P_C2);
-
-	  MMX_FS(i,k,p7G_C3) = iv[p7P_C3][k] + MSC_FS(k,p7P_C3);
+	  
+ 	  MMX_FS(i,k,p7G_C3) = p7_FLogsum(iv[p7P_C3][k], 
+                                          XMX_FS(i-3,p7G_B) + TSC(p7P_BM,k-1)) 
+                               + MSC_FS(k,p7P_C3);
 
 	  MMX_FS(i,k,p7G_C4) = iv[p7P_C4][k] + MSC_FS(k,p7P_C4);
 	
 	  MMX_FS(i,k,p7G_C5) = iv[p7P_C5][k] + MSC_FS(k,p7P_C5);
-
-	  MMX_FS(i,k,p7G_C0) = XMX_FS(i-3,p7G_B) + TSC(p7P_BM,k-1) + MSC_FS(k,p7P_C3);
-
-	  MMX_FS(i,k,p7G_C0) =  p7_FLogsum(	p7_FLogsum( MMX_FS(i,k,p7G_C0), MMX_FS(i,k,p7G_C1)), 
-			  				p7_FLogsum(	p7_FLogsum( MMX_FS(i,k,p7G_C2), MMX_FS(i,k,p7G_C3)),
-										p7_FLogsum( MMX_FS(i,k,p7G_C4), MMX_FS(i,k,p7G_C5))));
 	  
+	  MMX_FS(i,k,p7G_C0) =  p7_FLogsum( p7_FLogsum( MMX_FS(i,k,p7G_C1), MMX_FS(i,k,p7G_C2)), 
+			  	p7_FLogsum( p7_FLogsum( MMX_FS(i,k,p7G_C3), MMX_FS(i,k,p7G_C4)),
+				                        MMX_FS(i,k,p7G_C5)));
 	  /* insert state */
 	  IMX_FS(i,k) = p7_FLogsum(MMX_FS(i-3,k,p7G_C0) + TSC(p7P_MI,k),
 	  		                   IMX_FS(i-3,k)        + TSC(p7P_II,k));
@@ -204,7 +201,6 @@ p7_Forward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *g
      /* E state update */
 	  XMX_FS(i,p7G_E) = p7_FLogsum( XMX_FS(i,p7G_E),
 					    p7_FLogsum( MMX_FS(i,k,p7G_C0) + esc, DMX_FS(i,k) + esc));
-         
 	}
     	
 	/* unrolled match state M_M */
@@ -215,17 +211,17 @@ p7_Forward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *g
 
     MMX_FS(i,M,p7G_C2) = iv[p7P_C2][M] + MSC_FS(M,p7P_C2);
 
-    MMX_FS(i,M,p7G_C3) = iv[p7P_C3][M] + MSC_FS(M,p7P_C3);
+    MMX_FS(i,M,p7G_C3) = p7_FLogsum(iv[p7P_C3][M], 
+                                    XMX_FS(i-3,p7G_B) + TSC(p7P_BM,M-1))
+                         + MSC_FS(M,p7P_C3);
 
     MMX_FS(i,M,p7G_C4) = iv[p7P_C4][M] + MSC_FS(M,p7P_C4);
 
     MMX_FS(i,M,p7G_C5) = iv[p7P_C5][M] + MSC_FS(M,p7P_C5);
 
-    MMX_FS(i,M,p7G_C0) = XMX_FS(i-3,p7G_B) + TSC(p7P_BM,M-1) + MSC_FS(M,p7P_C3);
-
-    MMX_FS(i,M,p7G_C0) =  p7_FLogsum( p7_FLogsum( MMX_FS(i,M,p7G_C0), MMX_FS(i,M,p7G_C1)),
-                          p7_FLogsum( p7_FLogsum( MMX_FS(i,M,p7G_C2), MMX_FS(i,M,p7G_C3)),
-                                      p7_FLogsum( MMX_FS(i,M,p7G_C4), MMX_FS(i,M,p7G_C5))));
+    MMX_FS(i,M,p7G_C0) =  p7_FLogsum( p7_FLogsum( MMX_FS(i,M,p7G_C1), MMX_FS(i,M,p7G_C2)),
+                          p7_FLogsum( p7_FLogsum( MMX_FS(i,M,p7G_C3), MMX_FS(i,M,p7G_C4)),
+                                                  MMX_FS(i,M,p7G_C5)));
             
 	IMX_FS(i,M) = -eslINFINITY;
 
@@ -250,7 +246,6 @@ p7_Forward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *g
 	XMX_FS(i,p7G_B) = p7_FLogsum( XMX_FS(i,p7G_N) + gm->xsc[p7P_N][p7P_MOVE],
 				                  XMX_FS(i,p7G_J) + gm->xsc[p7P_J][p7P_MOVE]);
   }
-
   if (opt_sc != NULL) *opt_sc = p7_FLogsum( XMX(L,p7G_C), 
 				                p7_FLogsum( XMX(L-1,p7G_C), 
 										    XMX(L-2,p7G_C)))
@@ -261,9 +256,10 @@ p7_Forward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *g
 
   if(iv_mem != NULL) free(iv_mem);
   if(iv     != NULL) free(iv);
-
+    //FILE *out = fopen("out.txt", "w+");
+   //p7_gmx_fs_Dump(out, gx, p7_DEFAULT);
   return eslOK;
-  
+
 ERROR:
   if(iv_mem != NULL) free(iv_mem);
   if(iv     != NULL) free(iv);

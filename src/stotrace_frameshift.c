@@ -58,13 +58,11 @@ p7_StochasticTrace_Frameshift(ESL_RANDOMNESS *r, const ESL_DSQ *dsq, int L, cons
   int     scur, sprv;
   /* we'll index M states as 1..M, and D states as 2..M = M+2..2M: M0, D1 are impossibles. */
   ESL_ALLOC(sc, sizeof(float) * (2*M+1)); 
-  //printf("L = %d\n", L);
   k = 0;
   i = L;			
   if ((status = p7_trace_Append(tr, p7T_T, k, i)) != eslOK) goto ERROR;
   if ((status = p7_trace_Append(tr, p7T_C, k, i)) != eslOK) goto ERROR;
   sprv = p7T_C;
-
   while (sprv != p7T_S) 
     {
       switch (sprv) {
@@ -107,30 +105,27 @@ p7_StochasticTrace_Frameshift(ESL_RANDOMNESS *r, const ESL_DSQ *dsq, int L, cons
       /* M connects from {MDI} i-1,k-1, or B */
       case p7T_M:
 	if (MMX_FS(i,k,p7G_C0) == -eslINFINITY) ESL_XEXCEPTION(eslFAIL, "impossible M reached at k=%d,i=%d", k,i);
-
         sc[0] = MMX_FS(i,k,p7G_C1);
 	sc[1] = MMX_FS(i,k,p7G_C2);
 	sc[2] = MMX_FS(i,k,p7G_C3);
 	sc[3] = MMX_FS(i,k,p7G_C4);
 	sc[4] = MMX_FS(i,k,p7G_C5);
 	esl_vec_FLogNorm(sc, 5);
-        switch (esl_rnd_FChoose(r, sc, 5)) {
+ 	switch (esl_rnd_FChoose(r, sc, 5)) {
 	  case 0: d = 1; break; 
 	  case 1: d = 2; break; 
 	  case 2: d = 3; break; 
 	  case 3: d = 4; break; 
 	  case 4: d = 5; break; 
 	}
-
-	sc[0] = XMX(i-d,p7G_B) 		+ TSC(p7P_BM, k-1);
+	sc[0] = XMX(i-3,p7G_B) 		+ TSC(p7P_BM, k-1);
 	sc[1] = MMX_FS(i-d,k-1,p7G_C0)  + TSC(p7P_MM, k-1);
 	sc[2] = IMX_FS(i-d,k-1)   	+ TSC(p7P_IM, k-1);
 	sc[3] = DMX_FS(i-d,k-1)   	+ TSC(p7P_DM, k-1);
         esl_vec_FLogNorm(sc, 4);
 	//if(k == 96) printf("i %d, d %d, B %f, M %f, I %f, D %f\n", i, d, sc[0], sc[1], sc[2], sc[3]);
- 
         switch (esl_rnd_FChoose(r, sc, 4)) {
-          case 0: scur = p7T_B;  break;
+          case 0: scur = p7T_B;  d = 3; break;
           case 1: scur = p7T_M;  break;
           case 2: scur = p7T_I;  break;
           case 3: scur = p7T_D;  break;
@@ -203,10 +198,8 @@ p7_StochasticTrace_Frameshift(ESL_RANDOMNESS *r, const ESL_DSQ *dsq, int L, cons
       /* For NCJ, we had to defer i decrement. */
       if ( (scur == p7T_N || scur == p7T_C) && scur == sprv) i--;
       if ( scur == p7T_J                    && scur == sprv) i-=3;
-// printf("i = %d, k = %d, prev %d, cur %d\n", i, k, sprv, scur);
       sprv = scur;
     } /* end traceback, at S state */
-
   if ((status = p7_trace_Reverse(tr)) != eslOK) goto ERROR;
   tr->M = gm->M;
   tr->L = L;

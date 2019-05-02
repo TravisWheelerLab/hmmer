@@ -43,8 +43,8 @@
 #include "hmmer.h"
 #include "impl_sse.h"
 
-static int forward_engine (int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, __m128 **emit,                    P7_OMX *fwd, float *opt_sc);
-__m128 ** convert_emissions(int allocM, int allocL, float **emit_sc);
+static int forward_engine (int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om,                    P7_OMX *fwd, float *opt_sc);
+int convert_emissions(P7_OPROFILE *om, int allocM, int allocL, float **emit_sc);
 //static int backward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, const P7_OMX *fwd, P7_OMX *bck, float *opt_sc);
 
 
@@ -88,7 +88,7 @@ __m128 ** convert_emissions(int allocM, int allocL, float **emit_sc);
  *            In either case, <*opt_sc> is undefined.
  */
 int
-p7_Forward_Frameshift_SIMD(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float **emit_sc, float *opt_sc)
+p7_Forward_Frameshift_SIMD(const ESL_DSQ *dsq, int L, P7_OPROFILE *om, P7_OMX *ox, float **emit_sc, float *opt_sc)
 {
 #if eslDEBUGLEVEL > 0		
   if (om->M >  ox->allocQ4*4)    ESL_EXCEPTION(eslEINVAL, "DP matrix allocated too small (too few columns)");
@@ -97,9 +97,9 @@ p7_Forward_Frameshift_SIMD(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_
   if (! p7_oprofile_IsLocal(om)) ESL_EXCEPTION(eslEINVAL, "Forward implementation makes assumptions that only work for local alignment");
 #endif
 
-  __m128 **vec_emit = convert_emissions(om->M, om->L, emit_sc);
-
-  return forward_engine(TRUE, dsq, L, om, vec_emit, ox, opt_sc);
+  convert_emissions(om, om->M, om->L, emit_sc);
+  
+  return forward_engine(TRUE, dsq, L, om, ox, opt_sc);
 }
 
 #if 0
@@ -267,57 +267,65 @@ enum p7p_rsc_codon {
 #define MSC_FS(k,c) (rsc[(k) * p7P_CODONS + (c)])
 #endif
 
-__m128**
-convert_emissions(int allocM, int allocL, float **emit_sc)
+int
+convert_emissions(P7_OPROFILE *om, int allocM, int allocL, float **emit_sc)
 {
-	int i, k, q, z, c;
-	int status;
-	float *rsc;
-	__m128 **vec_emit = NULL;
-	__m128  *emit_mem = NULL;
+  int i, k, q, z;
+  int status;
+  float *rsc;
 
-	int          nqf = p7O_NQF(allocM); /* # of float vectors needed for query */
-    union { __m128 v; float x[4]; } tmp; /* used to align and load simd minivectors               */
+  int          nqf = p7O_NQF(allocM); /* # of float vectors needed for query */
+  union { __m128 v; float x[4]; } tmp; /* used to align and load simd minivectors               */
+ 
+  if (om->rfv_mem   != NULL) free(om->rfv_mem);
+  if (om->rfv       != NULL) free(om->rfv);
+ 
+  ESL_ALLOC(om->rfv_mem, sizeof(__m128) * nqf * p7P_CODONS * (allocL+1) + 15); /* +15 is for manual 16-byte alignment */
+  ESL_ALLOC(om->rfv, sizeof(__m128  *) * (allocL+1));
 
-	ESL_ALLOC(emit_mem, sizeof(__m128 *) * nqf * p7P_CODONS * (allocL+1) + 15); /* +15 is for manual 16-byte alignment */
-	ESL_ALLOC(vec_emit, sizeof(__m128  *) * (allocL+1));
+  om->rfv[0] = (__m128  *) (((unsigned long int) om->rfv_mem + 15) & (~0xf));
 
-	vec_emit[0] = (__m128  *) (((unsigned long int) emit_mem + 15) & (~0xf));
+  for (i = 1; i <= allocL; i++) 
+    om->rfv[i] = om->rfv[0] + (i * nqf * p7P_CODONS);
 
-	for (i = 1; i <= allocL; i++) 
-    	vec_emit[i] = vec_emit[0] + (i * nqf * p7P_CODONS);
-
-	for(i = 1; i <= allocL; i++) {
-	    rsc = emit_sc[i];
-    	for (k = 1, q = 0; q < nqf; q++, k+=4)
+  for(i = 1; i <= allocL; i++) 
+  {
+    rsc = emit_sc[i];
+    for (k = 1, q = 0; q < nqf; q++, k+=4)
       {
-     		for (z = 0; z < 4; z++) tmp.x[z] = (k+z <= allocM) ? MSC_FS(k+z,p7P_C1) : -eslINFINITY;
-			vec_emit[i][q + p7P_C1] = esl_sse_expf(tmp.v);
+      for (z = 0; z < 4; z++) 
+        tmp.x[z] = (k+z <= allocM) ? MSC_FS(k+z,p7P_C1) : -eslINFINITY;
+      om->rfv[i][q + p7P_C1] = esl_sse_expf(tmp.v);
 
-			for (z = 0; z < 4; z++) tmp.x[z] = (k+z <= allocM) ? MSC_FS(k+z,p7P_C2) : -eslINFINITY;
-            vec_emit[i][q + p7P_C2] = esl_sse_expf(tmp.v);
+      for (z = 0; z < 4; z++) 
+        tmp.x[z] = (k+z <= allocM) ? MSC_FS(k+z,p7P_C2) : -eslINFINITY;
+      om->rfv[i][q + p7P_C2] = esl_sse_expf(tmp.v);
 
-			for (z = 0; z < 4; z++) tmp.x[z] = (k+z <= allocM) ? MSC_FS(k+z,p7P_C3) : -eslINFINITY;
-            vec_emit[i][q + p7P_C3] = esl_sse_expf(tmp.v);
+      for (z = 0; z < 4; z++) 
+        tmp.x[z] = (k+z <= allocM) ? MSC_FS(k+z,p7P_C3) : -eslINFINITY;
+      om->rfv[i][q + p7P_C3] = esl_sse_expf(tmp.v);
 
-			for (z = 0; z < 4; z++) tmp.x[z] = (k+z <= allocM) ? MSC_FS(k+z,p7P_C4) : -eslINFINITY;
-            vec_emit[i][q + p7P_C4] = esl_sse_expf(tmp.v);
+      for (z = 0; z < 4; z++) 
+        tmp.x[z] = (k+z <= allocM) ? MSC_FS(k+z,p7P_C4) : -eslINFINITY;
+      om->rfv[i][q + p7P_C4] = esl_sse_expf(tmp.v);
 
-			for (z = 0; z < 4; z++) tmp.x[z] = (k+z <= allocM) ? MSC_FS(k+z,p7P_C5) : -eslINFINITY;
-            vec_emit[i][q + p7P_C5] = esl_sse_expf(tmp.v);
-	   }
-	}
+      for (z = 0; z < 4; z++) 
+        tmp.x[z] = (k+z <= allocM) ? MSC_FS(k+z,p7P_C5) : -eslINFINITY;
+      om->rfv[i][q + p7P_C5] = esl_sse_expf(tmp.v);
 
-	return vec_emit;
+      }
+  }
+
+  return eslOK;
 
 ERROR:
-  return NULL;
+  return status;
 }
 
 
 
 static int
-forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, __m128 **emit, P7_OMX *ox, float *opt_sc)
+forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float *opt_sc)
 {
   int status;
   register __m128  bpv, mpv, dpv, ipv;   /* previous row values used for match state    */
@@ -349,9 +357,8 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, __
   
   ivv[0] = (__m128  *) ( ( (unsigned long int) ((char *) ivv_mem + 15) & (~0xf)));
   
-  for (i = 1; i < p7X_CODONS; i++) 
-    ivv[i] = ivv[0] + i * Q;
-
+  for (c = 1; c < p7X_CODONS; c++) 
+    ivv[c] = ivv[0] + c * Q;
   /* Initialization. */
   ox->M  = om->M;
   ox->L  = L;
@@ -365,14 +372,13 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, __
   for (c = 0; c < p7X_CODONS; c++)
     for (q = 0; q < Q; q++)
 	  ivv[c][q] = zerov;
-
+ 
   /* Zeroth Row */
   xE = ox->xmx[0*p7X_NXCELLS+p7X_E] = 0.;
   xJ = ox->xmx[0*p7X_NXCELLS+p7X_J] = 0.;
   xC = ox->xmx[0*p7X_NXCELLS+p7X_C] = 0.;
   xN = ox->xmx[0*p7X_NXCELLS+p7X_N] = 1.;
   xB = ox->xmx[0*p7X_NXCELLS+p7X_B] = om->xf[p7O_N][p7O_MOVE];
-
   for (q = 0; q < Q; q++)
   {
     MMO_FS(dpc,q,p7X_C0) = zerov;
@@ -384,11 +390,9 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, __
     DMO_FS(dpc,q) = zerov;
     IMO_FS(dpc,q) = zerov;
   }
-
 #if eslDEBUGLEVEL > 0
-  if (ox->debugging) p7_omx_DumpFBRow(ox, TRUE, 0, 9, 5, xE, xN, xJ, xB, xC);	/* logify=TRUE, <rowi>=0, width=8, precision=5*/
+  if (ox->debugging) p7_omx_fs_DumpFBRow(ox, TRUE, 0, 9, 5, xE, xN, xJ, xB, xC);	/* logify=TRUE, <rowi>=0, width=8, precision=5*/
 #endif
-
   /* Rows 1 and 2  */
   for (i = 1; i < 3; i++) 
   {
@@ -410,37 +414,35 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, __
 	  IMO_FS(dpc,q) = zerov;
 	}
 #if eslDEBUGLEVEL > 0
-    if (ox->debugging) p7_omx_DumpFBRow(ox, TRUE, i, 9, 5, xE, xN, xJ, xB, xC);	
+    if (ox->debugging) p7_omx_fs_DumpFBRow(ox, TRUE, i, 9, 5, xE, xN, xJ, xB, xC);	
 #endif
   }
- 
+
   /*  Main loop 3..L  */
   for (i = 3; i <= L; i++)
     {
-	
 	  /* Set spacial and temporary vectors */	
       dpp   = dpc;                      
       dpc   = ox->dpf[do_full * i];     /* avoid conditional, use do_full as kronecker delta */
-      rp    = emit[i];
+      rp    = om->rfv[i];
       tp    = om->tfv;
       xEv   = zerov;
       xBv   = _mm_set1_ps(ox->xmx[(i-3)*p7X_NXCELLS+p7X_B]);
-
-	  mpv = zerov;
+      mpv = zerov;
       ipv = zerov; 
       dpv = zerov;
 
-	  mdv = zerov;
-	  ddv = zerov;
+      mdv = zerov;
+      ddv = zerov;
 
-	  /* Move intermediate value pointers so that i-4 becomes i-5, i-3 becomes i-4, etc. */
+      /* Move intermediate value pointers so that i-4 becomes i-5, i-3 becomes i-4, etc. */
       tivv = ivv[p7P_C5];
-	  for(c = p7X_CODONS; c < p7P_C1; c--)
+	  for(c = p7P_C5; c < p7P_C1; c--)
 	    ivv[c-1] = ivv[c];
       ivv[c] = tivv;
 
 	  for (q = 0; q < Q; q++)
-    {	
+    {
 	  /* shift vectors with i-1 values for C1 intermdediate values */
 	  mpv = _mm_shuffle_ps(mpv, MMO_FS(dpp,0,p7X_C0), _MM_SHUFFLE(3, 3, 0, 0));
       mpv = _mm_shuffle_ps(mpv,   MMO_FS(dpp,0,p7X_C0), _MM_SHUFFLE(3, 2, 2, 1));
@@ -463,24 +465,22 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, __
 	  MMO_FS(dpc,q,p7X_C1) = _mm_mul_ps(ivv[p7P_C1][q], rp[q+p7P_C1]);
 
 	  MMO_FS(dpc,q,p7X_C2) = _mm_mul_ps(ivv[p7P_C2][q], rp[q+p7P_C2]);
-   	  MMO_FS(dpc,q,p7X_C3) = _mm_mul_ps(ivv[p7P_C3][q], rp[q+p7P_C3]);
+   	  MMO_FS(dpc,q,p7X_C3) = _mm_mul_ps(_mm_add_ps(bpv, ivv[p7P_C3][q]), rp[q+p7P_C3]);
 	  MMO_FS(dpc,q,p7X_C4) = _mm_mul_ps(ivv[p7P_C4][q], rp[q+p7P_C4]);
-      MMO_FS(dpc,q,p7X_C5) = _mm_mul_ps(ivv[p7P_C5][q], rp[q+p7P_C5]);
+          MMO_FS(dpc,q,p7X_C5) = _mm_mul_ps(ivv[p7P_C5][q], rp[q+p7P_C5]);
      
 	  /* combine 5 codon types and B->M probablity to get total match state probability */
-      MMO_FS(dpc,q,p7X_C0) = _mm_mul_ps(bpv, rp[q+p7P_C3]);
-	  
-	  MMO_FS(dpc,q,p7X_C0) = _mm_add_ps(_mm_add_ps(
-							 _mm_add_ps(MMO_FS(dpc,q,p7X_C0), MMO_FS(dpc,q,p7X_C1)), 
-                             _mm_add_ps(MMO_FS(dpc,q,p7X_C2), MMO_FS(dpc,q,p7X_C3))),
-					         _mm_add_ps(MMO_FS(dpc,q,p7X_C4), MMO_FS(dpc,q,p7X_C5)));
+	  MMO_FS(dpc,q,p7X_C0) = _mm_add_ps( MMO_FS(dpc,q,p7X_C1), MMO_FS(dpc,q,p7X_C2));
+	  MMO_FS(dpc,q,p7X_C0) = _mm_add_ps( MMO_FS(dpc,q,p7X_C0), MMO_FS(dpc,q,p7X_C3));
+          MMO_FS(dpc,q,p7X_C0) = _mm_add_ps( MMO_FS(dpc,q,p7X_C0), MMO_FS(dpc,q,p7X_C4));
+          MMO_FS(dpc,q,p7X_C0) = _mm_add_ps( MMO_FS(dpc,q,p7X_C0), MMO_FS(dpc,q,p7X_C5));
 
 	  /* add match states E state */
 	  xEv  = _mm_add_ps(xEv, MMO_FS(dpc,q,p7X_C0));
 	
 	  /* shift i values for M->D calculation */
 	  mdv = _mm_shuffle_ps(mdv, MMO_FS(dpc,q,p7X_C0), _MM_SHUFFLE(3, 3, 0, 0));
-      mdv = _mm_shuffle_ps(mdv, MMO_FS(dpc,q,p7X_C0), _MM_SHUFFLE(3, 2, 2, 1));
+          mdv = _mm_shuffle_ps(mdv, MMO_FS(dpc,q,p7X_C0), _MM_SHUFFLE(3, 2, 2, 1));
 
 	  /* partial delete state pobability, M->D only */
 	  dcv   = _mm_mul_ps(mdv, *tp); tp++;
@@ -507,10 +507,10 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, __
 		tD.f[j] = tD.f[j-1] * DD.f[j];
  
 	  /* combine D->D and M->D for total delete state probability */
-      DMO_FS(dpc,q) =  _mm_add_ps(dcv, tD.v);	 
+          DMO_FS(dpc,q) =  _mm_add_ps(dcv, tD.v);	 
 	 
-      /* Add D's to xEv */
-      xEv = _mm_add_ps(DMO_FS(dpc,q), xEv);
+          /* Add D's to xEv */
+          xEv = _mm_add_ps(DMO_FS(dpc,q), xEv);
 	
 	  mpv = MMO_FS(dpp,q,p7X_C0);
 	  dpv = DMO_FS(dpp,q);
@@ -522,7 +522,7 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, __
 	} 
       /* Finally the "special" states, which start from Mk->E (->C, ->J->B) */
       
-	  /* The following incantation is a horizontal sum of xEv's elements  */
+      /* The following incantation is a horizontal sum of xEv's elements  */
       xEv = _mm_add_ps(xEv, _mm_shuffle_ps(xEv, xEv, _MM_SHUFFLE(0, 3, 2, 1)));
       xEv = _mm_add_ps(xEv, _mm_shuffle_ps(xEv, xEv, _MM_SHUFFLE(1, 0, 3, 2)));
       _mm_store_ss(&xE, xEv);
@@ -564,7 +564,7 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, __
       ox->xmx[i*p7X_NXCELLS+p7X_C] = xC;
 
 #if eslDEBUGLEVEL > 0
-      if (ox->debugging) p7_omx_DumpFBRow(ox, TRUE, i, 9, 5, xE, xN, xJ, xB, xC);	/* logify=TRUE, <rowi>=i, width=8, precision=5*/
+      if (ox->debugging) p7_omx_fs_DumpFBRow(ox, TRUE, i, 9, 5, xE, xN, xJ, xB, xC);	/* logify=TRUE, <rowi>=i, width=8, precision=5*/
 #endif
     } /* end loop over sequence residues 1..L */
 
@@ -573,13 +573,17 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, __
   /* On an underflow (which shouldn't happen), we counterintuitively return infinity:
    * the effect of this is to force the caller to rescore us with full range.
    */
-  xC = xC + ox->xmx[(L-1)*p7X_NXCELLS+p7X_C] + ox->xmx[(L-2)*p7X_NXCELLS+p7X_C];
+  xC = ox->xmx[(L)*p7X_NXCELLS+p7X_C] + ox->xmx[(L-1)*p7X_NXCELLS+p7X_C] + ox->xmx[(L-2)*p7X_NXCELLS+p7X_C];
   
   if       (isnan(xC))        ESL_EXCEPTION(eslERANGE, "forward score is NaN");
   else if  (L>0 && xC == 0.0) ESL_EXCEPTION(eslERANGE, "forward score underflow (is 0.0)");     /* if L==0, xC *should* be 0.0; J5/118 */
   else if  (isinf(xC) == 1)   ESL_EXCEPTION(eslERANGE, "forward score overflow (is infinity)");
 
   if (opt_sc != NULL) *opt_sc = ox->totscale + log(xC * om->xf[p7O_C][p7O_MOVE]);
+  
+  if(ivv_mem != NULL) free(ivv_mem);
+  if(ivv     != NULL) free(ivv);
+
   return eslOK;
 
 ERROR:

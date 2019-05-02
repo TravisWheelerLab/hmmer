@@ -584,7 +584,7 @@ p7_domaindef_ByPosteriorHeuristics_Frameshift(const ESL_SQ *sq, const ESL_SQ *nt
 	 p7_gmx_GrowTo(bck, gm->M, j-i+1);
      ddef->nregions++;
 	 //printf("i %d, j %d\n", i, j);
-	 if (is_multidomain_region(ddef, i, j))
+	 if (is_multidomain_region_fs(ddef, i, j))
      {  
        /* This region appears to contain more than one domain, so we have to
         * resolve it by cluster analysis of posterior trace samples, to define
@@ -601,6 +601,7 @@ p7_domaindef_ByPosteriorHeuristics_Frameshift(const ESL_SQ *sq, const ESL_SQ *nt
 	  
 	   p7_ReconfigMultihit_Frameshift(gm, saveL);
        p7_Forward_Frameshift(sq->dsq+i-1, j-i+1, gm, fwd, emit_sc, NULL);
+       //printf("PPPPPPP\n");
        region_trace_ensemble_frameshift(ddef, gm, sq->dsq, i, j, fwd, bck, &nc);
 	   p7_ReconfigUnihit_Frameshift(gm, saveL);
        
@@ -971,7 +972,6 @@ region_trace_ensemble_frameshift(P7_DOMAINDEF *ddef, const P7_PROFILE *gm, const
   for (t = 0; t < ddef->nsamples; t++)
     {
       p7_StochasticTrace_Frameshift(ddef->r, dsq+ireg-1, Lr, gm, fwd, ddef->tr);
-
       p7_trace_Index(ddef->tr);
 
       pos = 1;
@@ -979,19 +979,15 @@ region_trace_ensemble_frameshift(P7_DOMAINDEF *ddef, const P7_PROFILE *gm, const
 	{
 	  p7_spensemble_Add(ddef->sp, t, ddef->tr->sqfrom[d]+ireg-1, ddef->tr->sqto[d]+ireg-1, ddef->tr->hmmfrom[d], ddef->tr->hmmto[d]);
 	  p7_GNull2_ByTrace(gm, ddef->tr, ddef->tr->tfrom[d], ddef->tr->tto[d], wrk, null2);
-	  
 	  /* residues outside domains get bumped +1: because f'(x) = f(x), so f'(x)/f(x) = 1 in these segments */
 	  for (; pos <= ddef->tr->sqfrom[d]; pos++) ddef->n2sc[ireg+pos-1] += 1.0;
-
 	  /* Residues inside domains get bumped by their null2 ratio */
 	  for (; pos <= ddef->tr->sqto[d];   pos++) ddef->n2sc[ireg+pos-1] += null2[dsq[ireg+pos-1]];
 	}
       /* the remaining residues in the region outside any domains get +1 */
       for (; pos <= Lr; pos++)  ddef->n2sc[ireg+pos-1] += 1.0;
-
-      p7_trace_Reuse(ddef->tr);   
+      p7_trace_Reuse(ddef->tr);
     }
-
   /* Convert the accumulated n2sc[] ratios in this region to log odds null2 scores on each residue. */
   for (pos = ireg; pos <= jreg; pos++)
     ddef->n2sc[pos] = logf(ddef->n2sc[pos] / (float) ddef->nsamples);
@@ -1029,6 +1025,7 @@ region_trace_ensemble_frameshift(P7_DOMAINDEF *ddef, const P7_PROFILE *gm, const
     }
   ddef->sp->nc = d;
   *ret_nc = d;
+
   return eslOK;
 }
 
@@ -1480,7 +1477,6 @@ rescore_isolated_domain_frameshift(P7_DOMAINDEF *ddef, P7_PROFILE *gm, const ESL
   p7_ReconfigLength_Frameshift(gm, j-i+1);
   
   emit_sc = Codon_Emissions_Create(gm->rsc, sq->dsq+i-1, gcode, gm->M, Ld, indel_cost);
-  
   p7_Forward_Frameshift (sq->dsq+i-1, Ld, gm, gx1, emit_sc, &envsc);
   p7_Backward_Frameshift(sq->dsq+i-1, Ld, gm, gx2, emit_sc, &bcksc);
   gxppfs = p7_gmx_fs_Create(gm->M, Ld);

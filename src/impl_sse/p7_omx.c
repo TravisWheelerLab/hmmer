@@ -704,6 +704,126 @@ ERROR:
   free(v);
   return status;
 }
+
+/* Function:  p7_omx_fs_DumpFBRow()
+ * Synopsis:  Dump one row from float part of a DP matrix.
+ * Incept:    SRE, Wed Jul 30 16:45:16 2008 [Janelia]
+ *
+ * Purpose:   Dump current row of Forward/Backward (float) part of DP
+ *	      matrix <ox> for diagnostics, and include the values of
+ *	      specials <xE>, etc. The index <rowi> for the current row
+ *	      is used as a row label. 
+ *
+ *            The output format of the floats is controlled by
+ *	      <width>, <precision>; 8,5 is good for pspace, 5,2 is
+ *	      fine for lspace.
+ * 	       								       
+ * 	      If <rowi> is 0, print a header first too.			       
+ * 	       								       
+ * 	      If <logify> is TRUE, then scores are printed as log(score); this is 
+ * 	      useful for comparing DP with pspace scores with other DP matrices   
+ * 	      (like generic P7_GMX ones) that use log-odds scores.		       
+ * 	       								       
+ * 	      The output format is coordinated with <p7_gmx_Dump()> to	       
+ * 	      facilitate comparison to a known answer.                            
+ * 
+ * Returns:   <eslOK> on success.
+ *
+ * Throws:    <eslEMEM> on allocation failure.  
+ */
+int
+p7_omx_fs_DumpFBRow(P7_OMX *ox, int logify, int rowi, int width, int precision, float xE, float xN, float xJ, float xB, float xC)
+{
+  __m128 *dp;
+  int      M  = ox->M;
+  int      Q  = p7O_NQF(M);
+  float   *v  = NULL;		/* array of uninterleaved, unstriped scores  */
+  int      q,z,k;
+  union { __m128 v; float x[4]; } tmp;
+  int      status;
+
+  dp = (ox->allocR == 1) ? ox->dpf[0] :	ox->dpf[rowi];	  /* must set <dp> before using {MDI}MX macros */
+
+  ESL_ALLOC(v, sizeof(float) * ((Q*4)+1) * 6);
+  v[0] = 0.;
+
+  if (rowi == 0)
+    {
+      fprintf(ox->dfp, "      ");
+      for (k = 0; k <= M * 6;  k++) fprintf(ox->dfp, "%*d-C%d", width-3, k/6, k%6);
+      fprintf(ox->dfp, "%*s %*s %*s %*s %*s\n", width, "E", width, "N", width, "J", width, "B", width, "C");
+      fprintf(ox->dfp, "      ");
+      for (k = 0; k <= M+5;  k++) fprintf(ox->dfp, "%*s ", width, "--------");
+      fprintf(ox->dfp, "\n");
+    }
+
+  /* Unpack, then print M's. */
+  for (q = 0; q < Q; q++) {
+    tmp.v = MMXo_FS(q,p7X_C0);
+    for (z = 0; z < 4; z++) v[(q*24)+(z*6)] = tmp.x[z];
+    tmp.v = MMXo_FS(q,p7X_C1);
+    for (z = 0; z < 4; z++) v[(q*24)+(z*6)+1] = tmp.x[z];
+    tmp.v = MMXo_FS(q,p7X_C2);
+    for (z = 0; z < 4; z++) v[(q*24)+(z*6)+2] = tmp.x[z];
+    tmp.v = MMXo_FS(q,p7X_C3);
+    for (z = 0; z < 4; z++) v[(q*24)+(z*6)+3] = tmp.x[z];
+    tmp.v = MMXo_FS(q,p7X_C4);
+    for (z = 0; z < 4; z++) v[(q*24)+(z*6)+4] = tmp.x[z];
+    tmp.v = MMXo_FS(q,p7X_C5);
+    for (z = 0; z < 4; z++) v[(q*24)+(z*6)+5] = tmp.x[z];
+  }
+
+  fprintf(ox->dfp, "%3d M, ", rowi);
+  if (logify) for (k = 0; k <= M * 6; k++) fprintf(ox->dfp, "%*.*f ", width, precision, v[k] == 0. ? -eslINFINITY : log(v[k]));
+  else        for (k = 0; k <= M * 6; k++) fprintf(ox->dfp, "%*.*f ", width, precision, v[k]);
+
+ /* The specials */
+  if (logify) fprintf(ox->dfp, "%*.*f %*.*f %*.*f %*.*f %*.*f\n",
+		      width, precision, xE == 0. ? -eslINFINITY : log(xE),
+		      width, precision, xN == 0. ? -eslINFINITY : log(xN),
+		      width, precision, xJ == 0. ? -eslINFINITY : log(xJ),
+		      width, precision, xB == 0. ? -eslINFINITY : log(xB), 
+		      width, precision, xC == 0. ? -eslINFINITY : log(xC));
+  else        fprintf(ox->dfp, "%*.*f %*.*f %*.*f %*.*f %*.*f\n",
+		      width, precision, xE,   width, precision, xN, width, precision, xJ, 
+		      width, precision, xB,   width, precision, xC);
+
+  /* Unpack, then print I's. */
+  for (q = 0; q < Q; q++) {
+    tmp.v = IMXo_FS(q);
+    for (z = 0; z < 4; z++) {
+	v[(q*24)+(z*6)] = tmp.x[z];
+    	v[(q*24)+(z*6)+1] = v[(q*24)+(z*6)+2] = v[(q*24)+(z*6)+3] = 
+	v[(q*24)+(z*6)+4] = v[(q*24)+(z*6)+5] = 0.;
+    }
+  }
+  fprintf(ox->dfp, "%3d I ", rowi);
+  if (logify) for (k = 0; k <= M * 6; k++) fprintf(ox->dfp, "%*.*f ", width, precision, v[k] == 0. ? -eslINFINITY : log(v[k]));
+  else        for (k = 0; k <= M; k++) fprintf(ox->dfp, "%*.*f ", width, precision, v[k]);
+  fprintf(ox->dfp, "\n");
+
+  /* Unpack, then print D's. */
+  for (q = 0; q < Q; q++) {
+    tmp.v = DMXo_FS(q);
+    for (z = 0; z < 4; z++){
+	 v[(q*24)+(z*6)] = tmp.x[z];
+	 v[(q*24)+(z*6)+1] = v[(q*24)+(z*6)+2] = v[(q*24)+(z*6)+3] =
+       	 v[(q*24)+(z*6)+4] = v[(q*24)+(z*6)+5] = 0.;
+    }
+  }
+  fprintf(ox->dfp, "%3d D ", rowi);
+  if (logify) for (k = 0; k <= M * 6; k++) fprintf(ox->dfp, "%*.*f ", width, precision, v[k] == 0. ? -eslINFINITY : log(v[k]));
+  else        for (k = 0; k <= M * 6; k++) fprintf(ox->dfp, "%*.*f ", width, precision, v[k]);
+  fprintf(ox->dfp, "\n\n");
+
+  free(v);
+  return eslOK;
+
+ERROR:
+  free(v);
+  return status;
+}
+
 /*------------- end, debugging dumps of P7_OMX ------------------*/
 
 
