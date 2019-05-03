@@ -115,7 +115,7 @@ p7_Forward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *g
   int          i, k, c;  
   int		   status;
   float        esc  = p7_profile_IsLocal(gm) ? 0 : -eslINFINITY;
-  float sc;
+  //float sc;
   float *tiv        = NULL;
   float *iv_mem		= NULL;
   float **iv 		= NULL;
@@ -157,6 +157,7 @@ p7_Forward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *g
    *    tsc[0] = impossible for all eight transitions (no node 0)
    *    D_1 is wastefully calculated (doesn't exist)
    */
+
   for (i = 3; i <= L; i++) 
   {  
 	  rsc = emit_sc[i];
@@ -169,9 +170,9 @@ p7_Forward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *g
 	  for(c = p7P_C5; c > p7P_C1; c--) 
              iv[c-1] = iv[c];
 	  iv[c] = tiv;
-
 	  for (k = 1; k < M; k++)
 	{ 
+		
 	  iv[p7P_C1][k] = p7_FLogsum(MMX_FS(i-1,k-1,p7G_C0),
 			           p7_FLogsum(IMX_FS(i-1,k-1),        DMX_FS(i-1,k-1)));
 
@@ -190,20 +191,21 @@ p7_Forward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *g
 	  MMX_FS(i,k,p7G_C0) =  p7_FLogsum( p7_FLogsum( MMX_FS(i,k,p7G_C1), MMX_FS(i,k,p7G_C2)), 
 			  	p7_FLogsum( p7_FLogsum( MMX_FS(i,k,p7G_C3), MMX_FS(i,k,p7G_C4)),
 				                        MMX_FS(i,k,p7G_C5)));
-	  /* insert state */
+  /* insert state */
 	  IMX_FS(i,k) = p7_FLogsum(MMX_FS(i-3,k,p7G_C0) + TSC(p7P_MI,k),
 	  		                   IMX_FS(i-3,k)        + TSC(p7P_II,k));
 	  
 	  /* delete state */
 	  DMX_FS(i,k) = p7_FLogsum(MMX_FS(i,k-1,p7G_C0) + TSC(p7P_MD,k-1),
 				               DMX_FS(i,k-1)        + TSC(p7P_DD,k-1));
-
-     /* E state update */
+ 	if(i==3)
+		//	printf("k %d D %f\n", k, exp(DMX_FS(i,k)));
+    /* E state update */
+	 // printf("i %d k %d MD %f D %f\n", i, k, MMX_FS(i,k-1,p7G_C0) + TSC(p7P_MD,k-1), DMX_FS(i,k));
 	  XMX_FS(i,p7G_E) = p7_FLogsum( XMX_FS(i,p7G_E),
 					    p7_FLogsum( MMX_FS(i,k,p7G_C0) + esc, DMX_FS(i,k) + esc));
 	}
-    	
-	/* unrolled match state M_M */
+    		/* unrolled match state M_M */
 	iv[p7P_C1][M] = p7_FLogsum(MMX_FS(i-1,M-1,p7G_C0),
                      p7_FLogsum(IMX_FS(i-1,M-1),        DMX_FS(i-1,M-1)));
 
@@ -222,12 +224,15 @@ p7_Forward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *g
     MMX_FS(i,M,p7G_C0) =  p7_FLogsum( p7_FLogsum( MMX_FS(i,M,p7G_C1), MMX_FS(i,M,p7G_C2)),
                           p7_FLogsum( p7_FLogsum( MMX_FS(i,M,p7G_C3), MMX_FS(i,M,p7G_C4)),
                                                   MMX_FS(i,M,p7G_C5)));
-            
 	IMX_FS(i,M) = -eslINFINITY;
 
     /* unrolled delete state D_M */
     DMX_FS(i,M) = p7_FLogsum(MMX_FS(i,M-1,p7G_C0) + TSC(p7P_MD,M-1),
 			                  DMX_FS(i,M-1) + TSC(p7P_DD,M-1));
+//printf("i %d k %d MD %f D %f\n", i, M, MMX_FS(i,M-1,p7G_C0) + TSC(p7P_MD,M-1), DMX_FS(i,M));
+            	if(i==3)
+                       // printf("k %d D %f\n", M, exp(DMX_FS(i,M)));	
+
 
     /* unrolled E state update */
     XMX_FS(i,p7G_E) = p7_FLogsum(p7_FLogsum(MMX_FS(i,M,p7G_C0) + esc,
@@ -256,8 +261,8 @@ p7_Forward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *g
 
   if(iv_mem != NULL) free(iv_mem);
   if(iv     != NULL) free(iv);
-    //FILE *out = fopen("out.txt", "w+");
-   //p7_gmx_fs_Dump(out, gx, p7_DEFAULT);
+ // FILE *Serial = fopen("serial.txt", "w+");
+ // p7_gmx_fs_Dump(Serial, gx, p7_DEFAULT);
   return eslOK;
 
 ERROR:
@@ -489,7 +494,7 @@ sleep(5);
 float
 max_codon_one(float **emit_sc, ESL_DSQ *codon, const ESL_DSQ *dsq, ESL_GENCODE *gcode, int k, int i, float two_indel) {
 
-  int h, j, amino;
+  int amino;
   float cur_emit;
   float max_emit;
   float const *rsc;  
@@ -524,7 +529,7 @@ max_codon_one(float **emit_sc, ESL_DSQ *codon, const ESL_DSQ *dsq, ESL_GENCODE *
 float 
 max_codon_two(float **emit_sc, ESL_DSQ *codon, const ESL_DSQ *dsq, ESL_GENCODE *gcode, int k, int i, float one_indel) {
 
-  int j, amino;
+  int amino;
   float cur_emit;
   float max_emit;
   float const *rsc;
@@ -590,7 +595,6 @@ max_codon_three(float **emit_sc, ESL_DSQ *codon, const ESL_DSQ *dsq, ESL_GENCODE
 float 
 max_codon_four(float **emit_sc, ESL_DSQ *codon, const ESL_DSQ *dsq, ESL_GENCODE *gcode, int k, int i, float one_indel) {
 
-  int x,y,z;
   int amino;
   float cur_emit;
   float max_emit;

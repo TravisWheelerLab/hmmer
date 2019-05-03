@@ -1026,31 +1026,17 @@ fb_fs_conversion(const P7_PROFILE *gm, P7_OPROFILE *om)
       }
 
 
-  /* Transition scores, all but the DD's. */
+  /* Transition scores*/
   for (j = 0, k = 1, q = 0; q < nq; q++, k+=4)
     {
-      for (t = p7O_BM; t <= p7O_II; t++) /* this loop of 7 transitions depends on the order in the definition of p7o_tsc_e */
+      for (tg = p7P_MM; tg <= p7P_II; tg++)
 	{
-	  switch (t) {
-	  case p7O_BM: tg = p7P_BM;  kb = k-1; break; /* gm has tBMk stored off by one! start from k=0 not 1 */
-	  case p7O_MM: tg = p7P_MM;  kb = k-1; break; /* MM, DM, IM quads are rotated by -1, start from k=0  */
-	  case p7O_IM: tg = p7P_IM;  kb = k-1; break;
-	  case p7O_DM: tg = p7P_DM;  kb = k-1; break;
-	  case p7O_MD: tg = p7P_MD;  kb = k;   break; /* the remaining ones are straight up  */
-	  case p7O_MI: tg = p7P_MI;  kb = k;   break; 
-	  case p7O_II: tg = p7P_II;  kb = k;   break; 
-	  }
-
-	  for (z = 0; z < 4; z++) tmp.x[z] = (kb+z < M) ? p7P_TSC(gm, kb+z, tg) : -eslINFINITY;
+	if(tg < p7P_MI) kb = k-1;
+	else           kb = k;
+		
+	for (z = 0; z < 4; z++) tmp.x[z] = (kb+z < M) ? p7P_TSC(gm, kb+z, tg) : -eslINFINITY;
 	  om->tfv[j++] = esl_sse_expf(tmp.v);
 	}
-    }
-
-  /* And finally the DD's, which are at the end of the optimized tfv vector; (j is already there) */
-  for (k = 1, q = 0; q < nq; q++, k++)
-    {
-      for (z = 0; z < 4; z++) tmp.x[z] = (k+z < M) ? p7P_TSC(gm, k+z, p7P_DD) : -eslINFINITY;
-      om->tfv[j++] = esl_sse_expf(tmp.v);
     }
 
   /* Specials. (These are actually in exactly the same order in om and

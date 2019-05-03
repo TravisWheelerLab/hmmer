@@ -98,7 +98,9 @@ p7_Forward_Frameshift_SIMD(const ESL_DSQ *dsq, int L, P7_OPROFILE *om, P7_OMX *o
 #endif
 
   convert_emissions(om, om->M, om->L, emit_sc);
-  
+ 
+  FILE *Parallel = fopen("parallel.txt", "w+");
+  p7_omx_SetDumpMode(Parallel, ox, TRUE);
   return forward_engine(TRUE, dsq, L, om, ox, opt_sc);
 }
 
@@ -295,28 +297,29 @@ convert_emissions(P7_OPROFILE *om, int allocM, int allocL, float **emit_sc)
       {
       for (z = 0; z < 4; z++) 
         tmp.x[z] = (k+z <= allocM) ? MSC_FS(k+z,p7P_C1) : -eslINFINITY;
-      om->rfv[i][q + p7P_C1] = esl_sse_expf(tmp.v);
+      om->rfv[i][q*p7P_CODONS+p7P_C1] = esl_sse_expf(tmp.v);
 
       for (z = 0; z < 4; z++) 
         tmp.x[z] = (k+z <= allocM) ? MSC_FS(k+z,p7P_C2) : -eslINFINITY;
-      om->rfv[i][q + p7P_C2] = esl_sse_expf(tmp.v);
+      om->rfv[i][q*p7P_CODONS + p7P_C2] = esl_sse_expf(tmp.v);
 
-      for (z = 0; z < 4; z++) 
+      for (z = 0; z < 4; z++)  
         tmp.x[z] = (k+z <= allocM) ? MSC_FS(k+z,p7P_C3) : -eslINFINITY;
-      om->rfv[i][q + p7P_C3] = esl_sse_expf(tmp.v);
+      om->rfv[i][q*p7P_CODONS + p7P_C3] = esl_sse_expf(tmp.v);
 
       for (z = 0; z < 4; z++) 
         tmp.x[z] = (k+z <= allocM) ? MSC_FS(k+z,p7P_C4) : -eslINFINITY;
-      om->rfv[i][q + p7P_C4] = esl_sse_expf(tmp.v);
+      om->rfv[i][q*p7P_CODONS + p7P_C4] = esl_sse_expf(tmp.v);
 
       for (z = 0; z < 4; z++) 
         tmp.x[z] = (k+z <= allocM) ? MSC_FS(k+z,p7P_C5) : -eslINFINITY;
-      om->rfv[i][q + p7P_C5] = esl_sse_expf(tmp.v);
+      om->rfv[i][q*p7P_CODONS + p7P_C5] = esl_sse_expf(tmp.v);
 
       }
-  }
-
-  return eslOK;
+  
+}
+  
+    return eslOK;
 
 ERROR:
   return status;
@@ -348,7 +351,8 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7
   __m128 *tivv;
   __m128 *ivv_mem;	/* will point to intermiediate values to be reused in subsequent rows */ 
   __m128 **ivv;
-
+ float dd;
+union   { __m128 v; float f[4]; } temp;
   union   { __m128 v; float f[4]; } tD; /* used for serialized DD calculations */ 
   union   { __m128 v; float f[4]; } DD; /* used for serialized DD transitions  */ 
 
@@ -390,6 +394,7 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7
     DMO_FS(dpc,q) = zerov;
     IMO_FS(dpc,q) = zerov;
   }
+
 #if eslDEBUGLEVEL > 0
   if (ox->debugging) p7_omx_fs_DumpFBRow(ox, TRUE, 0, 9, 5, xE, xN, xJ, xB, xC);	/* logify=TRUE, <rowi>=0, width=8, precision=5*/
 #endif
@@ -400,17 +405,17 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7
 	xE = ox->xmx[i*p7X_NXCELLS+p7X_E] = 0.;
 	xJ = ox->xmx[i*p7X_NXCELLS+p7X_J] = 0.;
 	xC = ox->xmx[i*p7X_NXCELLS+p7X_C] = 0.;
-    xN = ox->xmx[i*p7X_NXCELLS+p7X_N] = om->xf[p7O_N][p7O_LOOP];
-    xB = ox->xmx[i*p7X_NXCELLS+p7X_B] = xN * om->xf[p7O_N][p7O_MOVE];
+   	xN = ox->xmx[i*p7X_NXCELLS+p7X_N] = om->xf[p7O_N][p7O_LOOP];
+    	xB = ox->xmx[i*p7X_NXCELLS+p7X_B] = xN * om->xf[p7O_N][p7O_MOVE];
 	for (q = 0; q < Q; q++)
 	{
 	  MMO_FS(dpc,q,p7X_C0) = zerov;	
 	  MMO_FS(dpc,q,p7X_C1) = zerov;
 	  MMO_FS(dpc,q,p7X_C2) = zerov;
-      MMO_FS(dpc,q,p7X_C3) = zerov;
+          MMO_FS(dpc,q,p7X_C3) = zerov;
 	  MMO_FS(dpc,q,p7X_C4) = zerov;
 	  MMO_FS(dpc,q,p7X_C5) = zerov;	
-      DMO_FS(dpc,q) = zerov;
+      	  DMO_FS(dpc,q) = zerov;
 	  IMO_FS(dpc,q) = zerov;
 	}
 #if eslDEBUGLEVEL > 0
@@ -433,7 +438,7 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7
       dpv = zerov;
 
       mdv = zerov;
-      ddv = zerov;
+      dd = 0.;
 
       /* Move intermediate value pointers so that i-4 becomes i-5, i-3 becomes i-4, etc. */
       tivv = ivv[p7P_C5];
@@ -453,21 +458,25 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7
       dpv = _mm_shuffle_ps(dpv, DMO_FS(dpp,0), _MM_SHUFFLE(3, 3, 0, 0));
       dpv = _mm_shuffle_ps(dpv,   DMO_FS(dpp,0), _MM_SHUFFLE(3, 2, 2, 1));
 	  
-	  /* B->M value */
-	  bpv = _mm_mul_ps(xBv, *tp); tp++;
-	  
-	  /* M->M, I->M & D->M values */
+  	  
+/* M->M, I->M & D->M values */
 	  ivv[p7P_C1][q] =            _mm_mul_ps(mpv, *tp); tp++;
+	  
+       
 	  ivv[p7P_C1][q] = _mm_add_ps(_mm_mul_ps(ipv, *tp), ivv[p7P_C1][q]); tp++;
 	  ivv[p7P_C1][q] = _mm_add_ps(_mm_mul_ps(dpv, *tp), ivv[p7P_C1][q]); tp++;
 
-	  /* combine intermeiate values with emittions probablities for 5 codon types */
-	  MMO_FS(dpc,q,p7X_C1) = _mm_mul_ps(ivv[p7P_C1][q], rp[q+p7P_C1]);
+	  /* B->M value */
+	  bpv = _mm_mul_ps(xBv, *tp); tp++;
 
-	  MMO_FS(dpc,q,p7X_C2) = _mm_mul_ps(ivv[p7P_C2][q], rp[q+p7P_C2]);
-   	  MMO_FS(dpc,q,p7X_C3) = _mm_mul_ps(_mm_add_ps(bpv, ivv[p7P_C3][q]), rp[q+p7P_C3]);
-	  MMO_FS(dpc,q,p7X_C4) = _mm_mul_ps(ivv[p7P_C4][q], rp[q+p7P_C4]);
-          MMO_FS(dpc,q,p7X_C5) = _mm_mul_ps(ivv[p7P_C5][q], rp[q+p7P_C5]);
+	  /* combine intermeiate values with emittions probablities for 5 codon types */
+	  MMO_FS(dpc,q,p7X_C1) = _mm_mul_ps(ivv[p7P_C1][q], rp[q*p7P_CODONS+p7P_C1]);
+
+	  MMO_FS(dpc,q,p7X_C2) = _mm_mul_ps(ivv[p7P_C2][q], rp[q*p7P_CODONS+p7P_C2]);
+   	  		
+	  MMO_FS(dpc,q,p7X_C3) = _mm_mul_ps(_mm_add_ps(bpv, ivv[p7P_C3][q]), rp[q*p7P_CODONS+p7P_C3]);
+	  MMO_FS(dpc,q,p7X_C4) = _mm_mul_ps(ivv[p7P_C4][q], rp[q*p7P_CODONS+p7P_C4]);
+          MMO_FS(dpc,q,p7X_C5) = _mm_mul_ps(ivv[p7P_C5][q], rp[q*p7P_CODONS+p7P_C5]);
      
 	  /* combine 5 codon types and B->M probablity to get total match state probability */
 	  MMO_FS(dpc,q,p7X_C0) = _mm_add_ps( MMO_FS(dpc,q,p7X_C1), MMO_FS(dpc,q,p7X_C2));
@@ -475,51 +484,53 @@ forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7
           MMO_FS(dpc,q,p7X_C0) = _mm_add_ps( MMO_FS(dpc,q,p7X_C0), MMO_FS(dpc,q,p7X_C4));
           MMO_FS(dpc,q,p7X_C0) = _mm_add_ps( MMO_FS(dpc,q,p7X_C0), MMO_FS(dpc,q,p7X_C5));
 
+
 	  /* add match states E state */
 	  xEv  = _mm_add_ps(xEv, MMO_FS(dpc,q,p7X_C0));
 	
 	  /* shift i values for M->D calculation */
-	  mdv = _mm_shuffle_ps(mdv, MMO_FS(dpc,q,p7X_C0), _MM_SHUFFLE(3, 3, 0, 0));
-          mdv = _mm_shuffle_ps(mdv, MMO_FS(dpc,q,p7X_C0), _MM_SHUFFLE(3, 2, 2, 1));
+	  mdv = _mm_shuffle_ps(mdv, MMO_FS(dpc,q,p7X_C0), _MM_SHUFFLE(0, 0, 3, 3));
+ 		  mdv = _mm_shuffle_ps(mdv, MMO_FS(dpc,q,p7X_C0), _MM_SHUFFLE(2, 1, 2, 1));
 
-	  /* partial delete state pobability, M->D only */
-	  dcv   = _mm_mul_ps(mdv, *tp); tp++;
-  
+	  	  /* partial delete state pobability, M->D only */
+	  DMO_FS(dpc,q)   = _mm_mul_ps(mdv, *tp); tp++;
+
+/* Now the DD paths. We would rather not serialize them but 
+       * in an accurate Forward calculation, we have few options.
+       */
+	  
+/* serailization of d->d */
+	  tD.v = DMO_FS(dpc,q);
+	  DD.v = *tp; tp++;
+
+	  tD.f[0] += dd * DD.f[0];	
+	  for (j = 1; j < 4; j++) 
+		tD.f[j] += tD.f[j-1] * DD.f[j];
+ 
+	  /* combine D->D and M->D for total delete state probability */
+          DMO_FS(dpc,q) =  tD.v;	 
+			temp.v = DMO_FS(dpc,q);
+        printf("i %d q %d 0 %f 1 %f 2 %f 3 %f\n\n", i, q, temp.f[0], temp.f[1], temp.f[2], temp.f[3]);	  
+
+
+          /* Add D's to xEv */
+          xEv = _mm_add_ps(DMO_FS(dpc,q), xEv);
+
 	  /* Calculate and store I(i,q); assumes odds ratio for emission is 1.0 */
 	  icv           =                _mm_mul_ps(ox->dpf[i-3][q * p7X_NSCELLS_FS + p7X_M + p7X_C0], *tp);  tp++;
 	  IMO_FS(dpc,q) = _mm_add_ps(icv, _mm_mul_ps(ox->dpf[i-3][q * p7X_NSCELLS_FS + p7X_I], *tp)); tp++; 
 
-      /* Now the DD paths. We would rather not serialize them but 
-       * in an accurate Forward calculation, we have few options.
-       */
-    
-	  /* shift i values for D->D calculation */
-	  ddv = _mm_shuffle_ps(ddv, zerov, _MM_SHUFFLE(3, 3, 0, 0));
-
-	  /* get dpc[q][0] from dcp[q-1][3] */  
-	  DMO_FS(dpc,q) = _mm_mul_ps(ddv, *tp); 
-
-	  /* serailization of D->D */
-	  tD.v = DMO_FS(dpc,q);
-	  DD.v = *tp; tp++;
-
-	  for (j = 1; j < 4; j++) 
-		tD.f[j] = tD.f[j-1] * DD.f[j];
- 
-	  /* combine D->D and M->D for total delete state probability */
-          DMO_FS(dpc,q) =  _mm_add_ps(dcv, tD.v);	 
-	 
-          /* Add D's to xEv */
-          xEv = _mm_add_ps(DMO_FS(dpc,q), xEv);
-	
+      	
 	  mpv = MMO_FS(dpp,q,p7X_C0);
 	  dpv = DMO_FS(dpp,q);
 	  ipv = IMO_FS(dpp,q);
 
 	  mdv = MMO_FS(dpc,q,p7X_C0);
-	  ddv = DMO_FS(dpc,q);  
-	  
-	} 
+	  /* shift i values for D->D calculation */
+	  ddv = _mm_shuffle_ps(DMO_FS(dpc,q), DMO_FS(dpc,q), _MM_SHUFFLE(3, 3, 3, 3));  
+	  dd = _mm_cvtss_f32(ddv);
+//	  printf("DDD %f\n", dd);
+      } 
       /* Finally the "special" states, which start from Mk->E (->C, ->J->B) */
       
       /* The following incantation is a horizontal sum of xEv's elements  */

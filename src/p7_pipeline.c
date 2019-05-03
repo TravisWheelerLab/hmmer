@@ -687,7 +687,7 @@ p7_pli_ConvertExtendAndMergeWindows (P7_OPROFILE *om, const P7_SCOREDATA *data, 
 	curr_window = windowlist->windows+i;
     if(orf_list[i].start < orf_list[i].end) {   
 		  	curr_window->n =  orf_list[i].start + (curr_window->n - 1) * 3;
-            curr_window->complementarity == p7_NOCOMPLEMENT;
+            curr_window->complementarity = p7_NOCOMPLEMENT;
    	} else {
 		 	curr_window->n =  (dna_len - orf_list[i].start + 1) + (curr_window->n - 1) * 3;
             curr_window->complementarity = p7_COMPLEMENT;
@@ -2126,7 +2126,7 @@ p7_pli_postViterbi_Frameshift(P7_PIPELINE *pli, P7_PROFILE *gm, P7_BG *bg, ESL_G
 
   P7_HIT           *hit     = NULL;     /* ptr to the current hit output data      */
   float            fwdsc;   /* filter scores                           */
-  float		   bwdsc;
+ // float		   bwdsc;
   float            filtersc;           /* HMM null filter score                   */
   float            nullsc;
   float            seqbias;
@@ -2143,7 +2143,6 @@ p7_pli_postViterbi_Frameshift(P7_PIPELINE *pli, P7_PROFILE *gm, P7_BG *bg, ESL_G
   float **emit_sc;
   int F3_L = ESL_MIN( window_len,  pli->B3);
   float	           indel_cost = 0.01;
-  int i;
   
   if(dnasq->end < dnasq->start) {
 	 	  subseq = dnasq->dsq + window_start;
@@ -2160,6 +2159,8 @@ p7_pli_postViterbi_Frameshift(P7_PIPELINE *pli, P7_PROFILE *gm, P7_BG *bg, ESL_G
   
   p7_Forward_Frameshift(subseq, window_len, gm, pli->gxf, emit_sc, &fwdsc);
 printf("fwdsc %f\n", fwdsc);
+  FILE *Serial = fopen("serial.txt", "w+");
+  p7_gmx_fs_Dump(Serial, pli->gxf, p7_DEFAULT);
 
  P7_OMX *oxf = p7_omx_fs_Create(gm->M, window_len, window_len);
  P7_OPROFILE *om = p7_oprofile_Create(gm->M, gm->abc);
@@ -2504,7 +2505,7 @@ p7_pli_postMSV_Frameshift(P7_PIPELINE *pli, P7_OPROFILE *om, P7_BG *bg,
 )
 {
 //printf("MSV PIPE\n");
-  float            bias_filtersc;      /* HMM null filter score		*/
+  //float            bias_filtersc;      /* HMM null filter score		*/
   float            filtersc;           /* HMM null filter score                   */
   float            seq_score;          /* the corrected per-seq bit score */
   double           P;                  /* P-value of a hit */
