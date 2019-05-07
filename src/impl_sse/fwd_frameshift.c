@@ -98,11 +98,17 @@ p7_Forward_Frameshift_SIMD(const ESL_DSQ *dsq, int L, P7_OPROFILE *om, P7_OMX *o
 
   convert_emissions(om, om->M, om->L, emit_sc);
   
-  FILE *Parallel = fopen("parallel.txt", "w+");
-  p7_omx_SetDumpMode(Parallel, ox, TRUE); 
+  ESL_STOPWATCH *watch = esl_stopwatch_Create();
+  esl_stopwatch_Start(watch);
 
- 
-  return forward_engine(TRUE, dsq, L, om, ox, opt_sc);
+
+  int r = forward_engine(TRUE, dsq, L, om, ox, opt_sc);
+  
+  esl_stopwatch_Stop(watch);
+  esl_stopwatch_Display(stdout, watch, "\tparallel time");
+  esl_stopwatch_Destroy(watch);
+
+  return r;
 }
 
 /*****************************************************************

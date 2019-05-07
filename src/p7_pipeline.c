@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h> 
-
+#include "esl_stopwatch.h"
 #include "easel.h"
 #include "esl_exponential.h"
 #include "esl_getopts.h"
@@ -2156,20 +2156,31 @@ p7_pli_postViterbi_Frameshift(P7_PIPELINE *pli, P7_PROFILE *gm, P7_BG *bg, ESL_G
   
   p7_gmx_fs_GrowTo(pli->gxf, gm->M, window_len);
   /* Parse with Forward and obtain its real Forward score. */
+  ESL_STOPWATCH *watch = esl_stopwatch_Create();
+  esl_stopwatch_Start(watch);
+
   p7_Forward_Frameshift(subseq, window_len, gm, pli->gxf, emit_sc, &fwdsc);
-printf("\tSerial forward score %f\n", fwdsc);
 
- P7_OMX *oxf = p7_omx_fs_Create(gm->M, window_len, window_len);
- P7_OPROFILE *om = p7_oprofile_Create(gm->M, gm->abc);
- p7_oprofile_fs_Convert(gm, om);
+
+  
+  esl_stopwatch_Stop(watch);
+  if(fwdsc < 100.0)
+  	esl_stopwatch_Display(stdout, watch, "\tSerail time ");
+  esl_stopwatch_Destroy(watch);
+
+  if(fwdsc < 100.0) {
+    printf("\tSerial forward score %f\n", fwdsc);
+    P7_OMX *oxf = p7_omx_fs_Create(gm->M, window_len, window_len);
+    P7_OPROFILE *om = p7_oprofile_Create(gm->M, gm->abc);
+    p7_oprofile_fs_Convert(gm, om);
  
- p7_Forward_Frameshift_SIMD(subseq, window_len, om, oxf, emit_sc, &fwdsc);
+    p7_Forward_Frameshift_SIMD(subseq, window_len, om, oxf, emit_sc, &fwdsc);
 
- printf("\tParallel forward score %f\n", fwdsc);
+    printf("\tParallel forward score %f\n", fwdsc);
 
- p7_oprofile_Destroy(om);
- p7_omx_Destroy(oxf);
-
+    p7_oprofile_Destroy(om);
+    p7_omx_Destroy(oxf);
+  }
 return eslOK;
   //TODO: figure out translated filterscore
 #if 0
