@@ -116,7 +116,7 @@ p7_Forward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *g
   int		   status;
   float        esc  = p7_profile_IsLocal(gm) ? 0 : -eslINFINITY;
   //float sc;
-  float *tiv        = NULL;
+  float *tpiv, *tciv;
   float *iv_mem		= NULL;
   float **iv 		= NULL;
 
@@ -127,7 +127,7 @@ p7_Forward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *g
   for (c = 0; c < p7P_CODONS; c++) {
     iv[c] = iv_mem + c * (M+1);
     for(k = 0; k <= M; k++)
-	  iv[c][k] = -eslINFINITY;
+      iv[c][k] = -eslINFINITY;
   }
 
   p7_FLogsumInit();		/* Would like to get rid of this -- have main()'s all initialize instead, more efficient */
@@ -135,23 +135,25 @@ p7_Forward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *g
   gx->L = L;
 
   /* Initialization of the zeroth, first and second row. */
-  XMX_FS(0,p7G_N) =  0;       					                  /* S->N, p=1            */
+  XMX_FS(0,p7G_N) =  0;       					  /* S->N, p=1            */
   XMX_FS(0,p7G_B) =  gm->xsc[p7P_N][p7P_MOVE];                    /* S->N->B, no N-tail   */
   XMX_FS(1,p7G_N) =  gm->xsc[p7P_N][p7P_LOOP];                    /* N->N                 */
   XMX_FS(1,p7G_B) =  XMX_FS(1,p7G_N) + gm->xsc[p7P_N][p7P_MOVE];  /* N->B                 */
   XMX_FS(2,p7G_N) =  gm->xsc[p7P_N][p7P_LOOP];                    /* N->N                 */
   XMX_FS(2,p7G_B) =  XMX_FS(2,p7G_N) + gm->xsc[p7P_N][p7P_MOVE];  /* N->B                 */
-  for(i = 0; i < 3; i++) {
+  
+  for(i = 0; i < 3; i++) 
+  {
     XMX_FS(i,p7G_E) = XMX_FS(i,p7G_C) = XMX_FS(i,p7G_J) = -eslINFINITY;  /* need seq to get here */
+    MMX_FS(i,0,p7G_C0) = MMX_FS(i,0,p7G_C1) = MMX_FS(i,0,p7G_C2) = MMX_FS(i,0,p7G_C3) = 
+    MMX_FS(i,0,p7G_C4) = MMX_FS(i,0,p7G_C5) = IMX_FS(i,0) = DMX_FS(i,0) = -eslINFINITY;
     
-	MMX_FS(i,0,p7G_C0) = MMX_FS(i,0,p7G_C1) = MMX_FS(i,0,p7G_C2) = MMX_FS(i,0,p7G_C3)
-    = MMX_FS(i,0,p7G_C4) = MMX_FS(i,0,p7G_C5) = IMX_FS(i,0) = DMX_FS(i,0) = -eslINFINITY;
-    
-	for (k = 0; k <= M; k++) {
-      MMX_FS(i,k,p7G_C0) = MMX_FS(i,k,p7G_C1) = MMX_FS(i,k,p7G_C2) = MMX_FS(i,k,p7G_C3)      
-      = MMX_FS(i,k,p7G_C4) = MMX_FS(i,k,p7G_C5) = IMX_FS(i,k) = DMX_FS(i,k) = -eslINFINITY;
+    for (k = 0; k <= M; k++) {
+      MMX_FS(i,k,p7G_C0) = MMX_FS(i,k,p7G_C1) = MMX_FS(i,k,p7G_C2) = MMX_FS(i,k,p7G_C3) = 
+      MMX_FS(i,k,p7G_C4) = MMX_FS(i,k,p7G_C5) = IMX_FS(i,k) = DMX_FS(i,k) = -eslINFINITY;
     }
-  }	
+  }
+	
   /* Recursion. Done as a pull.
    * Note some slightly wasteful boundary conditions:  
    *    tsc[0] = impossible for all eight transitions (no node 0)
@@ -160,116 +162,117 @@ p7_Forward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *g
 
   for (i = 3; i <= L; i++) 
   {  
-	  rsc = emit_sc[i];
+    rsc = emit_sc[i];
 
-      MMX_FS(i,0,p7G_C0) = MMX_FS(i,0,p7G_C1) = MMX_FS(i,0,p7G_C2) = MMX_FS(i,0,p7G_C3)      
-      = MMX_FS(i,0,p7G_C4) = MMX_FS(i,0,p7G_C5) = IMX_FS(i,0) = DMX_FS(i,0) = -eslINFINITY;
+    MMX_FS(i,0,p7G_C0) = MMX_FS(i,0,p7G_C1) = MMX_FS(i,0,p7G_C2) = MMX_FS(i,0,p7G_C3)      
+    = MMX_FS(i,0,p7G_C4) = MMX_FS(i,0,p7G_C5) = IMX_FS(i,0) = DMX_FS(i,0) = -eslINFINITY;
      
-      XMX_FS(i, p7G_E) = -eslINFINITY;
-	  tiv = iv[p7P_C5];
-	  for(c = p7P_C5; c > p7P_C1; c--) 
-             iv[c-1] = iv[c];
-	  iv[c] = tiv;
-	  for (k = 1; k < M; k++)
-	{ 
-		
-	  iv[p7P_C1][k] = p7_FLogsum(MMX_FS(i-1,k-1,p7G_C0),
-			           p7_FLogsum(IMX_FS(i-1,k-1),        DMX_FS(i-1,k-1)));
+    XMX_FS(i, p7G_E) = -eslINFINITY;
 
-	  MMX_FS(i,k,p7G_C1) = iv[p7P_C1][k] + MSC_FS(k,p7P_C1);
- 	  
-	  MMX_FS(i,k,p7G_C2) = iv[p7P_C2][k] + MSC_FS(k,p7P_C2);
+    /* Rotate pointers for intermediate values */	  
+    tpiv = iv[p7P_C1];
+    for(c = p7P_C2; c <= p7P_C5; c++) 
+    { 
+      tciv = iv[c];
+      iv[c] = tpiv;
+      tpiv = tciv;       
+    }
+    iv[p7P_C1] = tciv;
+    for (k = 1; k < M; k++)
+    {
+
+      /* Calculate new intermediate value for i-1 */
+      iv[p7P_C1][k] = p7_FLogsum(MMX_FS(i-1,k-1,p7G_C0) + TSC(p7P_MM,k-1),
+		      p7_FLogsum(IMX_FS(i-1,k-1)        + TSC(p7P_IM,k-1),        
+	                         DMX_FS(i-1,k-1)        + TSC(p7P_DM,k-1)));
+     
+      /* Add intermediate values to emissions values for codon specific match values. */
+      /* Include B->M transition to C3.						      */	
+      
+      MMX_FS(i,k,p7G_C1) = iv[p7P_C1][k] + MSC_FS(k,p7P_C1);
+      MMX_FS(i,k,p7G_C2) = iv[p7P_C2][k] + MSC_FS(k,p7P_C2);
+      MMX_FS(i,k,p7G_C3) = p7_FLogsum(iv[p7P_C3][k], XMX_FS(i-3,p7G_B) + TSC(p7P_BM,k-1)) 
+                                         + MSC_FS(k,p7P_C3);
+      MMX_FS(i,k,p7G_C4) = iv[p7P_C4][k] + MSC_FS(k,p7P_C4);
+      MMX_FS(i,k,p7G_C5) = iv[p7P_C5][k] + MSC_FS(k,p7P_C5);
 	  
- 	  MMX_FS(i,k,p7G_C3) = p7_FLogsum(iv[p7P_C3][k], 
-                                          XMX_FS(i-3,p7G_B) + TSC(p7P_BM,k-1)) 
-                               + MSC_FS(k,p7P_C3);
+      /* Combine codon specific match probabilities for total match state probability */
+      MMX_FS(i,k,p7G_C0) =  p7_FLogsum( p7_FLogsum( MMX_FS(i,k,p7G_C1), MMX_FS(i,k,p7G_C2)), 
+			    p7_FLogsum( p7_FLogsum( MMX_FS(i,k,p7G_C3), MMX_FS(i,k,p7G_C4)),
+				                    MMX_FS(i,k,p7G_C5)));
 
-	  MMX_FS(i,k,p7G_C4) = iv[p7P_C4][k] + MSC_FS(k,p7P_C4);
+      /* insert state */
+      IMX_FS(i,k) = p7_FLogsum(MMX_FS(i-3,k,p7G_C0) + TSC(p7P_MI,k),
+	  		       IMX_FS(i-3,k)        + TSC(p7P_II,k));
+	  
+      /* delete state */
+      DMX_FS(i,k) = p7_FLogsum(MMX_FS(i,k-1,p7G_C0) + TSC(p7P_MD,k-1),
+			       DMX_FS(i,k-1)        + TSC(p7P_DD,k-1));
 	
-	  MMX_FS(i,k,p7G_C5) = iv[p7P_C5][k] + MSC_FS(k,p7P_C5);
-	  
-	  MMX_FS(i,k,p7G_C0) =  p7_FLogsum( p7_FLogsum( MMX_FS(i,k,p7G_C1), MMX_FS(i,k,p7G_C2)), 
-			  	p7_FLogsum( p7_FLogsum( MMX_FS(i,k,p7G_C3), MMX_FS(i,k,p7G_C4)),
-				                        MMX_FS(i,k,p7G_C5)));
-  /* insert state */
-	  IMX_FS(i,k) = p7_FLogsum(MMX_FS(i-3,k,p7G_C0) + TSC(p7P_MI,k),
-	  		                   IMX_FS(i-3,k)        + TSC(p7P_II,k));
-	  
-	  /* delete state */
-	  DMX_FS(i,k) = p7_FLogsum(MMX_FS(i,k-1,p7G_C0) + TSC(p7P_MD,k-1),
-				               DMX_FS(i,k-1)        + TSC(p7P_DD,k-1));
- 	if(i==3)
-		//	printf("k %d D %f\n", k, exp(DMX_FS(i,k)));
-    /* E state update */
-	 // printf("i %d k %d MD %f D %f\n", i, k, MMX_FS(i,k-1,p7G_C0) + TSC(p7P_MD,k-1), DMX_FS(i,k));
-	  XMX_FS(i,p7G_E) = p7_FLogsum( XMX_FS(i,p7G_E),
-					    p7_FLogsum( MMX_FS(i,k,p7G_C0) + esc, DMX_FS(i,k) + esc));
-	}
-    		/* unrolled match state M_M */
-	iv[p7P_C1][M] = p7_FLogsum(MMX_FS(i-1,M-1,p7G_C0),
-                     p7_FLogsum(IMX_FS(i-1,M-1),        DMX_FS(i-1,M-1)));
+      /* E state update */
+      XMX_FS(i,p7G_E) = p7_FLogsum( XMX_FS(i,p7G_E),
+			p7_FLogsum( MMX_FS(i,k,p7G_C0) + esc, DMX_FS(i,k) + esc));
+    }
+
+
+    /* unrolled match state M_M */
+    iv[p7P_C1][M] = p7_FLogsum(MMX_FS(i-1,M-1,p7G_C0) + TSC(p7P_MM,M-1),
+	            p7_FLogsum(IMX_FS(i-1,M-1)        + TSC(p7P_IM,M-1),        
+	                       DMX_FS(i-1,M-1)        + TSC(p7P_DM,M-1)));
 
     MMX_FS(i,M,p7G_C1) = iv[p7P_C1][M] + MSC_FS(M,p7P_C1);
-
     MMX_FS(i,M,p7G_C2) = iv[p7P_C2][M] + MSC_FS(M,p7P_C2);
-
-    MMX_FS(i,M,p7G_C3) = p7_FLogsum(iv[p7P_C3][M], 
-                                    XMX_FS(i-3,p7G_B) + TSC(p7P_BM,M-1))
-                         + MSC_FS(M,p7P_C3);
-
+    MMX_FS(i,M,p7G_C3) = p7_FLogsum(iv[p7P_C3][M], XMX_FS(i-3,p7G_B) + TSC(p7P_BM,M-1))
+                                       + MSC_FS(M,p7P_C3);
     MMX_FS(i,M,p7G_C4) = iv[p7P_C4][M] + MSC_FS(M,p7P_C4);
-
     MMX_FS(i,M,p7G_C5) = iv[p7P_C5][M] + MSC_FS(M,p7P_C5);
 
     MMX_FS(i,M,p7G_C0) =  p7_FLogsum( p7_FLogsum( MMX_FS(i,M,p7G_C1), MMX_FS(i,M,p7G_C2)),
                           p7_FLogsum( p7_FLogsum( MMX_FS(i,M,p7G_C3), MMX_FS(i,M,p7G_C4)),
                                                   MMX_FS(i,M,p7G_C5)));
-	IMX_FS(i,M) = -eslINFINITY;
 
-    /* unrolled delete state D_M */
+
+    IMX_FS(i,M) = -eslINFINITY;
+    
+   /* unrolled delete state D_M */
     DMX_FS(i,M) = p7_FLogsum(MMX_FS(i,M-1,p7G_C0) + TSC(p7P_MD,M-1),
 			                  DMX_FS(i,M-1) + TSC(p7P_DD,M-1));
-//printf("i %d k %d MD %f D %f\n", i, M, MMX_FS(i,M-1,p7G_C0) + TSC(p7P_MD,M-1), DMX_FS(i,M));
-            	if(i==3)
-                       // printf("k %d D %f\n", M, exp(DMX_FS(i,M)));	
-
 
     /* unrolled E state update */
-    XMX_FS(i,p7G_E) = p7_FLogsum(p7_FLogsum(MMX_FS(i,M,p7G_C0) + esc,
-					                        DMX_FS(i,M) + esc),
-					                        XMX_FS(i,p7G_E));
-
+    XMX_FS(i,p7G_E) = p7_FLogsum(p7_FLogsum(MMX_FS(i,M,p7G_C0) + esc, DMX_FS(i,M) + esc),
+		                            XMX_FS(i,p7G_E));
     /* J, C and N states */
     XMX_FS(i,p7G_J) = p7_FLogsum( XMX_FS(i-3,p7G_J) + gm->xsc[p7P_J][p7P_LOOP],
-		 		                  XMX_FS(i,p7G_E)   + gm->xsc[p7P_E][p7P_LOOP]);
+		 		  XMX_FS(i,p7G_E)   + gm->xsc[p7P_E][p7P_LOOP]);
 	  
-	XMX_FS(i,p7G_C) = p7_FLogsum( XMX_FS(i-3,p7G_C) + gm->xsc[p7P_C][p7P_LOOP],
-				                  XMX_FS(i,p7G_E)   + gm->xsc[p7P_E][p7P_MOVE]);
+    XMX_FS(i,p7G_C) = p7_FLogsum( XMX_FS(i-3,p7G_C) + gm->xsc[p7P_C][p7P_LOOP],
+				  XMX_FS(i,p7G_E)   + gm->xsc[p7P_E][p7P_MOVE]);
          
-	XMX_FS(i,p7G_N) =             XMX_FS(i-3,p7G_N) + gm->xsc[p7P_N][p7P_LOOP];
+    XMX_FS(i,p7G_N) =             XMX_FS(i-3,p7G_N) + gm->xsc[p7P_N][p7P_LOOP];
 
-	XMX_FS(i,p7G_B) = p7_FLogsum( XMX_FS(i,p7G_N) + gm->xsc[p7P_N][p7P_MOVE],
-				                  XMX_FS(i,p7G_J) + gm->xsc[p7P_J][p7P_MOVE]);
+    XMX_FS(i,p7G_B) = p7_FLogsum( XMX_FS(i,p7G_N) + gm->xsc[p7P_N][p7P_MOVE],
+				  XMX_FS(i,p7G_J) + gm->xsc[p7P_J][p7P_MOVE]);
+
   }
+
+  /* Combine all three frames to get score */
   if (opt_sc != NULL) *opt_sc = p7_FLogsum( XMX(L,p7G_C), 
-				                p7_FLogsum( XMX(L-1,p7G_C), 
-										    XMX(L-2,p7G_C)))
-	 			                + gm->xsc[p7P_C][p7P_MOVE];
+				p7_FLogsum( XMX(L-1,p7G_C), 
+					    XMX(L-2,p7G_C)))
+	 			          + gm->xsc[p7P_C][p7P_MOVE];
 
   gx->M = M;
   gx->L = L;
 
   if(iv_mem != NULL) free(iv_mem);
   if(iv     != NULL) free(iv);
- // FILE *Serial = fopen("serial.txt", "w+");
- // p7_gmx_fs_Dump(Serial, gx, p7_DEFAULT);
+
   return eslOK;
 
 ERROR:
   if(iv_mem != NULL) free(iv_mem);
   if(iv     != NULL) free(iv);
   return status;
-
 }
 
 
@@ -327,7 +330,6 @@ p7_Backward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *
                            DMX(L, k+1)  + TSC(p7P_DD,k));
     IMX(L,k) = -eslINFINITY;
   } 
-//printf("BACK L %d M %d\n", L, M); 
   /* Main recursion */
   for (i = L-1; i >= 1; i--)
   {
@@ -485,9 +487,6 @@ p7_Backward_Frameshift(const ESL_DSQ *dsq, int L, const P7_PROFILE *gm, P7_GMX *
       
   gx->M = M;
   gx->L = L;
-//printf("DONE\n");
-sleep(5);
-//p7_gmx_DumpWindow(stdout, gx, 300, gx->L,100, 106, p7_DEFAULT);
   return eslOK;
 }
 
@@ -580,7 +579,6 @@ max_codon_three(float **emit_sc, ESL_DSQ *codon, const ESL_DSQ *dsq, ESL_GENCODE
     amino = esl_gencode_GetTranslation(gcode, &codon[1]);
 	rsc = emit_sc[amino];
     max_emit = MSC(k);
-	
 	if(amino != 27) return max_emit + no_indel;
     else{
 		amino = 26;

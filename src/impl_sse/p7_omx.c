@@ -166,18 +166,17 @@ p7_omx_fs_Create(int allocM, int allocL, int allocXL)
   ox->allocQ8  = p7O_NQW(allocM);
   ox->allocQ16 = p7O_NQB(allocM);
   ox->ncells   = ox->allocR * ox->allocQ4 * 4;      /* # of DP cells allocated, where 1 cell contains MDI */
-
   ESL_ALLOC(ox->dp_mem, sizeof(__m128) * ox->allocR * ox->allocQ4 * p7X_NSCELLS_FS + 15);  /* floats always dominate; +15 for alignment */
   ESL_ALLOC(ox->dpb,    sizeof(__m128i *) * ox->allocR);
   ESL_ALLOC(ox->dpw,    sizeof(__m128i *) * ox->allocR);
   ESL_ALLOC(ox->dpf,    sizeof(__m128  *) * ox->allocR);
-
+	
   ox->dpb[0] = (__m128i *) ( ( (unsigned long int) ((char *) ox->dp_mem + 15) & (~0xf)));
   ox->dpw[0] = (__m128i *) ( ( (unsigned long int) ((char *) ox->dp_mem + 15) & (~0xf)));
   ox->dpf[0] = (__m128  *) ( ( (unsigned long int) ((char *) ox->dp_mem + 15) & (~0xf)));
 
   for (i = 1; i <= allocL; i++) {
-    ox->dpf[i] = ox->dpf[0] + i * ox->allocQ4  * p7X_NSCELLS;
+    ox->dpf[i] = ox->dpf[0] + i * ox->allocQ4  * p7X_NSCELLS_FS;
     ox->dpw[i] = ox->dpw[0] + i * ox->allocQ8  * p7X_NSCELLS;
     ox->dpb[i] = ox->dpb[0] + i * ox->allocQ16;
   }

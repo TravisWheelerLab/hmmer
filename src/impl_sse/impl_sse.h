@@ -240,8 +240,8 @@ typedef struct p7_omx_s {
 #define IMO(dp,q) ((dp)[(q) * p7X_NSCELLS + p7X_I])
 
 #define MMO_FS(dp,q,c) ((dp)[(q) * p7X_NSCELLS_FS + p7X_M + (c)])
-#define DMO_FS(dp,q) ((dp)[(q) * p7X_NSCELLS_FS + p7X_D])
-#define IMO_FS(dp,q) ((dp)[(q) * p7X_NSCELLS_FS + p7X_I])
+#define DMO_FS(dp,q)   ((dp)[(q) * p7X_NSCELLS_FS + p7X_D])
+#define IMO_FS(dp,q)   ((dp)[(q) * p7X_NSCELLS_FS + p7X_I])
 
 static inline float
 p7_omx_FGetMDI(const P7_OMX *ox, int s, int i, int k)

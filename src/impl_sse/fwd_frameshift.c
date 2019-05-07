@@ -45,7 +45,6 @@
 
 static int forward_engine (int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om,                    P7_OMX *fwd, float *opt_sc);
 int convert_emissions(P7_OPROFILE *om, int allocM, int allocL, float **emit_sc);
-//static int backward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, const P7_OMX *fwd, P7_OMX *bck, float *opt_sc);
 
 
 /*****************************************************************
@@ -98,176 +97,17 @@ p7_Forward_Frameshift_SIMD(const ESL_DSQ *dsq, int L, P7_OPROFILE *om, P7_OMX *o
 #endif
 
   convert_emissions(om, om->M, om->L, emit_sc);
- 
+  
   FILE *Parallel = fopen("parallel.txt", "w+");
-  p7_omx_SetDumpMode(Parallel, ox, TRUE);
+  p7_omx_SetDumpMode(Parallel, ox, TRUE); 
+
+ 
   return forward_engine(TRUE, dsq, L, om, ox, opt_sc);
 }
-
-#if 0
-/* Function:  p7_ForwardParser()
- * Synopsis:  The Forward algorithm, linear memory parsing version.
- * Incept:    SRE, Fri Aug 15 19:05:26 2008 [Casa de Gatos]
- *
- * Purpose:   Same as <p7_Forward() except that the full matrix isn't
- *            kept. Instead, a linear $O(M+L)$ memory algorithm is
- *            used, keeping only the DP matrix values for the special
- *            (BENCJ) states. These are sufficient to do posterior
- *            decoding to identify high-probability regions where
- *            domains are.
- * 
- *            The caller must provide a suitably allocated "parsing"
- *            <ox> by calling <ox = p7_omx_Create(M, 0, L)> or
- *            <p7_omx_GrowTo(ox, M, 0, L)>.
- *            
- * Args:      dsq     - digital target sequence, 1..L
- *            L       - length of dsq in residues          
- *            om      - optimized profile
- *            ox      - RETURN: Forward DP matrix
- *            ret_sc  - RETURN: Forward score (in nats)          
- *
- * Returns:   <eslOK> on success.
- *
- * Throws:    <eslEINVAL> if <ox> allocation is too small, or if the profile
- *            isn't in local alignment mode.
- *            <eslERANGE> if the score exceeds the limited range of
- *            a probability-space odds ratio.
- *            In either case, <*opt_sc> is undefined.
- */
-int
-p7_ForwardParser(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float *opt_sc)
-{
-#if eslDEBUGLEVEL > 0		
-  if (om->M >  ox->allocQ4*4)    ESL_EXCEPTION(eslEINVAL, "DP matrix allocated too small (too few columns)");
-  if (ox->validR < 1)            ESL_EXCEPTION(eslEINVAL, "DP matrix allocated too small (too few MDI rows)");
-  if (L     >= ox->allocXR)      ESL_EXCEPTION(eslEINVAL, "DP matrix allocated too small (too few X rows)");
-  if (! p7_oprofile_IsLocal(om)) ESL_EXCEPTION(eslEINVAL, "Forward implementation makes assumptions that only work for local alignment");
-#endif
-
-  return forward_engine(FALSE, dsq, L, om, ox, opt_sc);
-}
-
-
-
-/* Function:  p7_Backward()
- * Synopsis:  The Backward algorithm; full matrix fill version.
- * Incept:    SRE, Sat Aug 16 08:34:22 2008 [Janelia]
- *
- * Purpose:   Calculates the Backward algorithm for sequence <dsq> of
- *            length <L> residues, using optimized profile <om>, and a
- *            preallocated DP matrix <bck>. A filled Forward matrix
- *            must also be provided in <fwd>, because we need to use
- *            the same sparse scaling factors that Forward used. The
- *            <bck> matrix is filled in, and the Backward score (in
- *            nats) is optionally returned in <opt_sc>.
- *            
- *            This calculation requires $O(ML)$ memory and time. The
- *            caller must provide a suitably allocated full <bck> by
- *            calling <bck = p7_omx_Create(M, L, L)> or
- *            <p7_omx_GrowTo(bck, M, L, L)>.
- *            
- *            Because only the sparse scaling factors are needed from
- *            the <fwd> matrix, the caller may have this matrix
- *            calculated either in full or parsing mode.
- *            
- *            The model <om> must be configured in local alignment
- *            mode. The sparse rescaling method used to keep
- *            probability values within single-precision floating
- *            point dynamic range cannot be safely applied to models in
- *            glocal or global mode.
- *
- * Args:      dsq     - digital target sequence, 1..L
- *            L       - length of dsq in residues          
- *            om      - optimized profile
- *            fwd     - filled Forward DP matrix, for scale factors
- *            do_full - TRUE=full matrix; FALSE=linear memory parse mode
- *            bck     - RETURN: filled Backward matrix
- *            opt_sc  - optRETURN: Backward score (in nats)          
- *
- * Returns:   <eslOK> on success. 
- *
- * Throws:    <eslEINVAL> if <ox> allocation is too small, or if the profile
- *            isn't in local alignment mode.
- *            <eslERANGE> if the score exceeds the limited range of
- *            a probability-space odds ratio.
- *            In either case, <*opt_sc> is undefined.
- */
-int 
-p7_Backward(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, const P7_OMX *fwd, P7_OMX *bck, float *opt_sc)
-{
-#if eslDEBUGLEVEL > 0		
-  if (om->M >  bck->allocQ4*4)    ESL_EXCEPTION(eslEINVAL, "DP matrix allocated too small (too few columns)");
-  if (L     >= bck->validR)       ESL_EXCEPTION(eslEINVAL, "DP matrix allocated too small (too few MDI rows)");
-  if (L     >= bck->allocXR)      ESL_EXCEPTION(eslEINVAL, "DP matrix allocated too small (too few X rows)");
-  if (L     != fwd->L)            ESL_EXCEPTION(eslEINVAL, "fwd matrix size doesn't agree with length L");
-  if (! p7_oprofile_IsLocal(om))  ESL_EXCEPTION(eslEINVAL, "Forward implementation makes assumptions that only work for local alignment");
-#endif
-
- return backward_engine(TRUE, dsq, L, om, fwd, bck, opt_sc);
-}
-
-
-
-/* Function:  p7_BackwardParser()
- * Synopsis:  The Backward algorithm, linear memory parsing version.
- * Incept:    SRE, Sat Aug 16 08:34:13 2008 [Janelia]
- *
- * Purpose:   Same as <p7_Backward()> except that the full matrix isn't
- *            kept. Instead, a linear $O(M+L)$ memory algorithm is
- *            used, keeping only the DP matrix values for the special
- *            (BENCJ) states. These are sufficient to do posterior
- *            decoding to identify high-probability regions where
- *            domains are.
- *       
- *            The caller must provide a suitably allocated "parsing"
- *            <bck> by calling <bck = p7_omx_Create(M, 0, L)> or
- *            <p7_omx_GrowTo(bck, M, 0, L)>.
- *
- * Args:      dsq     - digital target sequence, 1..L
- *            L       - length of dsq in residues          
- *            om      - optimized profile
- *            fwd     - filled Forward DP matrix, for scale factors
- *            bck     - RETURN: filled Backward matrix
- *            opt_sc  - optRETURN: Backward score (in nats)          
- *
- * Returns:   <eslOK> on success. 
- *
- * Throws:    <eslEINVAL> if <ox> allocation is too small, or if the profile
- *            isn't in local alignment mode.
- *            <eslERANGE> if the score exceeds the limited range of
- *            a probability-space odds ratio.
- *            In either case, <*opt_sc> is undefined.
- */
-int 
-p7_BackwardParser(const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, const P7_OMX *fwd, P7_OMX *bck, float *opt_sc)
-{
-#if eslDEBUGLEVEL > 0		
-  if (om->M >  bck->allocQ4*4)    ESL_EXCEPTION(eslEINVAL, "DP matrix allocated too small (too few columns)");
-  if (bck->validR < 1)            ESL_EXCEPTION(eslEINVAL, "DP matrix allocated too small (too few MDI rows)");
-  if (L     >= bck->allocXR)      ESL_EXCEPTION(eslEINVAL, "DP matrix allocated too small (too few X rows)");
-  if (L     != fwd->L)            ESL_EXCEPTION(eslEINVAL, "fwd matrix size doesn't agree with length L");
-  if (! p7_oprofile_IsLocal(om))  ESL_EXCEPTION(eslEINVAL, "Forward implementation makes assumptions that only work for local alignment");
-#endif
-
-  return backward_engine(FALSE, dsq, L, om, fwd, bck, opt_sc);
-}
-
-#endif
 
 /*****************************************************************
  * 2. Forward/Backward engine implementations (called thru API)
  *****************************************************************/
-#if 0
-enum p7p_rsc_codon {
-  p7P_C1 = 0,
-  p7P_C2 = 1,
-  p7P_C3 = 2,
-  p7P_C4 = 3,
-  p7P_C5 = 4,
-};
-#define p7P_CODONS 5
-#define MSC_FS(k,c) (rsc[(k) * p7P_CODONS + (c)])
-#endif
 
 int
 convert_emissions(P7_OPROFILE *om, int allocM, int allocL, float **emit_sc)
@@ -325,37 +165,35 @@ ERROR:
   return status;
 }
 
-
-
 static int
 forward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7_OMX *ox, float *opt_sc)
 {
   int status;
-  register __m128  bpv, mpv, dpv, ipv;   /* previous row values used for match state    */
-  register __m128 mdv, ddv;    /* previous column values used for delete state */ 
-  register __m128 icv;		   /* temp storage for insert state             */
-  register __m128 dcv;		   /* temp storgae for delete state                             */
-  register __m128 xEv;		   /* E state: keeps max for Mk->E as we go                     */
-  register __m128 xBv;		   /* B state: splatted vector of B[i-3] for B->Mk calculations */
-  __m128   zerov;		   /* splatted 0.0's in a vector                                */
-  float    xN, xE, xB, xC, xJ;	   /* special states' scores                                    */
-  int i;			   /* counter over sequence positions 1..L                      */
-  int q;			   /* counter over quads 0..nq-1                                */
-  int j;			   /* counter over DD iterations (4 is full serialization)      */
-  int c;               /* counter over codon lookbacks 1..5                         */
-  int Q       = p7O_NQF(om->M);	   /* segment length: # of vectors                              */
-  __m128 *dpc = ox->dpf[0];        /* current row, for use in {MDI}MO(dpp,q) access macro       */
-  __m128 *dpp;                     /* previous row, for use in {MDI}MO(dpp,q) access macro      */
-  __m128 *rp;			   /* will point at om->rfv[x] for residue x[i]                 */
-  __m128 *tp;			   /* will point into (and step thru) om->tfv                   */
-  __m128 *tivv;
-  __m128 *ivv_mem;	/* will point to intermiediate values to be reused in subsequent rows */ 
-  __m128 **ivv;
- float dd;
-union   { __m128 v; float f[4]; } temp;
-  union   { __m128 v; float f[4]; } tD; /* used for serialized DD calculations */ 
-  union   { __m128 v; float f[4]; } DD; /* used for serialized DD transitions  */ 
+  register __m128  bpv, mpv, dpv, ipv;   /* previous row values used for match state                  */
+  register __m128 mdv, ddv;              /* previous column values used for delete state              */ 
+  register __m128 xEv;		         /* E state: keeps max for Mk->E as we go                     */
+  register __m128 xBv;		         /* B state: splatted vector of B[i-3] for B->Mk calculations */
+  __m128   zerov;		         /* splatted 0.0's in a vector                                */
+  float    dd;                           /* final D state value from previous D state vecotor         */
+  float    xN, xE, xB, xC, xJ;	         /* special states' scores                                    */
+  float    totscales[3];                 /* holds scaling factors for seperate frames                 */
+  int      i;			         /* counter over sequence positions 1..L                      */
+  int      q;			         /* counter over quads 0..nq-1                                */
+  int      j;			         /* counter over DD iterations (4 is full serialization)      */
+  int      c;                            /* counter over codon lookbacks 1..5                         */
+  int      Q  = p7O_NQF(om->M);	         /* segment length: # of vectors                              */
+  __m128  *dpc = ox->dpf[0];             /* current row, for use in {MDI}MO(dpp,q) access macro       */
+  __m128  *dpp;                          /* previous row, for use in {MDI}MO(dpp,q) access macro      */
+  __m128  *rp;			         /* will point at om->rfv[x] for residue x[i]                 */
+  __m128  *tp;			         /* will point into (and step thru) om->tfv                   */
+  __m128  *tpivv, *tcivv;                /* temporary pointers for shuffleing intermeidate values     */
+  __m128  *ivv_mem;	                 /* memory to store intermiediate values                      */ 
+  __m128  **ivv;			 /* pointers for intermiediate values                         */	
+  union   { __m128 v; float f[4]; } tD;  /* used for serialized DD calculations                       */ 
+  union   { __m128 v; float f[4]; } DD;  /* used for serialized DD transitions                        */
+   
 
+  union   { __m128 v; float f[4]; } temp;
   ESL_ALLOC(ivv_mem, sizeof(__m128)    * p7X_CODONS * Q + 15);   
   ESL_ALLOC(ivv,     sizeof(__m128  *) * p7X_CODONS         );
   
@@ -363,16 +201,17 @@ union   { __m128 v; float f[4]; } temp;
   
   for (c = 1; c < p7X_CODONS; c++) 
     ivv[c] = ivv[0] + c * Q;
+
   /* Initialization. */
   ox->M  = om->M;
   ox->L  = L;
   ox->has_own_scales = TRUE;   /* all forward matrices control their own scalefactors */
   ox->xmx[p7X_SCALE] = 1.0;
   ox->totscale       = 0.0;
-
+  totscales[0] = totscales[1] = totscales[2] = 0.0;
   zerov  = _mm_setzero_ps();
   
-  /* Intermidiate value */
+  /* Intermidiate value vector intialization*/
   for (c = 0; c < p7X_CODONS; c++)
     for (q = 0; q < Q; q++)
 	  ivv[c][q] = zerov;
@@ -383,6 +222,7 @@ union   { __m128 v; float f[4]; } temp;
   xC = ox->xmx[0*p7X_NXCELLS+p7X_C] = 0.;
   xN = ox->xmx[0*p7X_NXCELLS+p7X_N] = 1.;
   xB = ox->xmx[0*p7X_NXCELLS+p7X_B] = om->xf[p7O_N][p7O_MOVE];
+ 
   for (q = 0; q < Q; q++)
   {
     MMO_FS(dpc,q,p7X_C0) = zerov;
@@ -396,188 +236,195 @@ union   { __m128 v; float f[4]; } temp;
   }
 
 #if eslDEBUGLEVEL > 0
-  if (ox->debugging) p7_omx_fs_DumpFBRow(ox, TRUE, 0, 9, 5, xE, xN, xJ, xB, xC);	/* logify=TRUE, <rowi>=0, width=8, precision=5*/
+  if (ox->debugging) p7_omx_fs_DumpFBRow(ox,FALSE, 0, 9, 5, xE, xN, xJ, xB, xC);	/* logify=TRUE, <rowi>=0, width=8, precision=5*/
 #endif
+  
   /* Rows 1 and 2  */
   for (i = 1; i < 3; i++) 
   {
-	dpc = ox->dpf[do_full * i];
-	xE = ox->xmx[i*p7X_NXCELLS+p7X_E] = 0.;
-	xJ = ox->xmx[i*p7X_NXCELLS+p7X_J] = 0.;
-	xC = ox->xmx[i*p7X_NXCELLS+p7X_C] = 0.;
-   	xN = ox->xmx[i*p7X_NXCELLS+p7X_N] = om->xf[p7O_N][p7O_LOOP];
-    	xB = ox->xmx[i*p7X_NXCELLS+p7X_B] = xN * om->xf[p7O_N][p7O_MOVE];
-	for (q = 0; q < Q; q++)
-	{
-	  MMO_FS(dpc,q,p7X_C0) = zerov;	
-	  MMO_FS(dpc,q,p7X_C1) = zerov;
-	  MMO_FS(dpc,q,p7X_C2) = zerov;
-          MMO_FS(dpc,q,p7X_C3) = zerov;
-	  MMO_FS(dpc,q,p7X_C4) = zerov;
-	  MMO_FS(dpc,q,p7X_C5) = zerov;	
-      	  DMO_FS(dpc,q) = zerov;
-	  IMO_FS(dpc,q) = zerov;
-	}
+    dpc = ox->dpf[do_full * i];
+    xE = ox->xmx[i*p7X_NXCELLS+p7X_E] = 0.;
+    xJ = ox->xmx[i*p7X_NXCELLS+p7X_J] = 0.;
+    xC = ox->xmx[i*p7X_NXCELLS+p7X_C] = 0.;
+    xN = ox->xmx[i*p7X_NXCELLS+p7X_N] = om->xf[p7O_N][p7O_LOOP];
+    xB = ox->xmx[i*p7X_NXCELLS+p7X_B] = xN * om->xf[p7O_N][p7O_MOVE];
+    for (q = 0; q < Q; q++)
+    {
+      MMO_FS(dpc,q,p7X_C0) = zerov;	
+      MMO_FS(dpc,q,p7X_C1) = zerov;
+      MMO_FS(dpc,q,p7X_C2) = zerov;
+      MMO_FS(dpc,q,p7X_C3) = zerov;
+      MMO_FS(dpc,q,p7X_C4) = zerov;
+      MMO_FS(dpc,q,p7X_C5) = zerov;	
+      DMO_FS(dpc,q) = zerov;
+      IMO_FS(dpc,q) = zerov;
+    }
 #if eslDEBUGLEVEL > 0
-    if (ox->debugging) p7_omx_fs_DumpFBRow(ox, TRUE, i, 9, 5, xE, xN, xJ, xB, xC);	
+    if (ox->debugging) p7_omx_fs_DumpFBRow(ox, FALSE, i, 9, 5, xE, xN, xJ, xB, xC);	
 #endif
   }
 
   /*  Main loop 3..L  */
   for (i = 3; i <= L; i++)
+  {
+     /* Set special and temporary vectors */	
+    dpp   = dpc;                      
+    dpc   = ox->dpf[do_full * i];     /* avoid conditional, use do_full as kronecker delta */
+    
+    rp    = om->rfv[i];
+    tp    = om->tfv;
+
+    xEv   = zerov;
+    xBv   = _mm_set1_ps(ox->xmx[(i-3)*p7X_NXCELLS+p7X_B]);
+    mpv = zerov;
+    ipv = zerov; 
+    dpv = zerov;
+
+    mdv = zerov;
+    dd = 0.;
+ 
+    /* Move intermediate value pointers so that i-4 becomes i-5, i-3 becomes i-4, etc. */
+    tpivv = ivv[p7P_C1];
+    for(c = p7P_C2; c <= p7P_C5; c++)
     {
-	  /* Set spacial and temporary vectors */	
-      dpp   = dpc;                      
-      dpc   = ox->dpf[do_full * i];     /* avoid conditional, use do_full as kronecker delta */
-      rp    = om->rfv[i];
-      tp    = om->tfv;
-      xEv   = zerov;
-      xBv   = _mm_set1_ps(ox->xmx[(i-3)*p7X_NXCELLS+p7X_B]);
-      mpv = zerov;
-      ipv = zerov; 
-      dpv = zerov;
+      tcivv = ivv[c];        	    
+      ivv[c] = tpivv;
+      tpivv = tcivv;
+    }
+    ivv[p7P_C1] = tcivv;
 
-      mdv = zerov;
-      dd = 0.;
-
-      /* Move intermediate value pointers so that i-4 becomes i-5, i-3 becomes i-4, etc. */
-      tivv = ivv[p7P_C5];
-	  for(c = p7P_C5; c < p7P_C1; c--)
-	    ivv[c-1] = ivv[c];
-      ivv[c] = tivv;
-
-	  for (q = 0; q < Q; q++)
+    for (q = 0; q < Q; q++)
     {
-	  /* shift vectors with i-1 values for C1 intermdediate values */
-	  mpv = _mm_shuffle_ps(mpv, MMO_FS(dpp,0,p7X_C0), _MM_SHUFFLE(3, 3, 0, 0));
-      mpv = _mm_shuffle_ps(mpv,   MMO_FS(dpp,0,p7X_C0), _MM_SHUFFLE(3, 2, 2, 1));
+      /* shift vectors with i-1 values for C1 intermdediate values */
+      mpv = _mm_shuffle_ps(mpv, MMO_FS(dpp,q,p7X_C0), _MM_SHUFFLE(0, 0, 3, 3));
+      mpv = _mm_shuffle_ps(mpv,   MMO_FS(dpp,q,p7X_C0), _MM_SHUFFLE(2, 1, 2, 1));
 
-      ipv = _mm_shuffle_ps(ipv, IMO_FS(dpp,0), _MM_SHUFFLE(3, 3, 0, 0));
-      ipv = _mm_shuffle_ps(ipv,   IMO_FS(dpp,0), _MM_SHUFFLE(3, 2, 2, 1));
+      ipv = _mm_shuffle_ps(ipv, IMO_FS(dpp,q), _MM_SHUFFLE(0, 0, 3, 3));
+      ipv = _mm_shuffle_ps(ipv,   IMO_FS(dpp,q), _MM_SHUFFLE(2, 1, 2, 1));
 
-      dpv = _mm_shuffle_ps(dpv, DMO_FS(dpp,0), _MM_SHUFFLE(3, 3, 0, 0));
-      dpv = _mm_shuffle_ps(dpv,   DMO_FS(dpp,0), _MM_SHUFFLE(3, 2, 2, 1));
-	  
-  	  
-/* M->M, I->M & D->M values */
-	  ivv[p7P_C1][q] =            _mm_mul_ps(mpv, *tp); tp++;
-	  
-       
-	  ivv[p7P_C1][q] = _mm_add_ps(_mm_mul_ps(ipv, *tp), ivv[p7P_C1][q]); tp++;
-	  ivv[p7P_C1][q] = _mm_add_ps(_mm_mul_ps(dpv, *tp), ivv[p7P_C1][q]); tp++;
-
-	  /* B->M value */
-	  bpv = _mm_mul_ps(xBv, *tp); tp++;
-
-	  /* combine intermeiate values with emittions probablities for 5 codon types */
-	  MMO_FS(dpc,q,p7X_C1) = _mm_mul_ps(ivv[p7P_C1][q], rp[q*p7P_CODONS+p7P_C1]);
-
-	  MMO_FS(dpc,q,p7X_C2) = _mm_mul_ps(ivv[p7P_C2][q], rp[q*p7P_CODONS+p7P_C2]);
-   	  		
-	  MMO_FS(dpc,q,p7X_C3) = _mm_mul_ps(_mm_add_ps(bpv, ivv[p7P_C3][q]), rp[q*p7P_CODONS+p7P_C3]);
-	  MMO_FS(dpc,q,p7X_C4) = _mm_mul_ps(ivv[p7P_C4][q], rp[q*p7P_CODONS+p7P_C4]);
-          MMO_FS(dpc,q,p7X_C5) = _mm_mul_ps(ivv[p7P_C5][q], rp[q*p7P_CODONS+p7P_C5]);
+      dpv = _mm_shuffle_ps(dpv, DMO_FS(dpp,q), _MM_SHUFFLE(0, 0, 3, 3));
+      dpv = _mm_shuffle_ps(dpv,   DMO_FS(dpp,q), _MM_SHUFFLE(2, 1, 2, 1));
      
-	  /* combine 5 codon types and B->M probablity to get total match state probability */
-	  MMO_FS(dpc,q,p7X_C0) = _mm_add_ps( MMO_FS(dpc,q,p7X_C1), MMO_FS(dpc,q,p7X_C2));
-	  MMO_FS(dpc,q,p7X_C0) = _mm_add_ps( MMO_FS(dpc,q,p7X_C0), MMO_FS(dpc,q,p7X_C3));
-          MMO_FS(dpc,q,p7X_C0) = _mm_add_ps( MMO_FS(dpc,q,p7X_C0), MMO_FS(dpc,q,p7X_C4));
-          MMO_FS(dpc,q,p7X_C0) = _mm_add_ps( MMO_FS(dpc,q,p7X_C0), MMO_FS(dpc,q,p7X_C5));
+      /* M->M, I->M & D->M values */	  	 
+      ivv[p7P_C1][q] =            _mm_mul_ps(mpv, *tp); tp++;
+      ivv[p7P_C1][q] = _mm_add_ps(_mm_mul_ps(ipv, *tp), ivv[p7P_C1][q]); tp++;
+      ivv[p7P_C1][q] = _mm_add_ps(_mm_mul_ps(dpv, *tp), ivv[p7P_C1][q]); tp++;
+      /* B->M value */
+      bpv = _mm_mul_ps(xBv, *tp); tp++;
 
+      /* combine intermeiate values with emittions probablities for 5 codon types */
+      MMO_FS(dpc,q,p7X_C1) = _mm_mul_ps(ivv[p7P_C1][q], rp[q*p7P_CODONS+p7P_C1]);
+      MMO_FS(dpc,q,p7X_C2) = _mm_mul_ps(ivv[p7P_C2][q], rp[q*p7P_CODONS+p7P_C2]);
+      MMO_FS(dpc,q,p7X_C3) = _mm_mul_ps(_mm_add_ps(bpv, ivv[p7P_C3][q]), rp[q*p7P_CODONS+p7P_C3]);
+      MMO_FS(dpc,q,p7X_C4) = _mm_mul_ps(ivv[p7P_C4][q], rp[q*p7P_CODONS+p7P_C4]);
+      MMO_FS(dpc,q,p7X_C5) = _mm_mul_ps(ivv[p7P_C5][q], rp[q*p7P_CODONS+p7P_C5]);
+     
+      /* combine 5 codon types and B->M probablity to get total match state probability */
+      MMO_FS(dpc,q,p7X_C0) = _mm_add_ps( MMO_FS(dpc,q,p7X_C1), MMO_FS(dpc,q,p7X_C2));
+      MMO_FS(dpc,q,p7X_C0) = _mm_add_ps( MMO_FS(dpc,q,p7X_C0), MMO_FS(dpc,q,p7X_C3));
+      MMO_FS(dpc,q,p7X_C0) = _mm_add_ps( MMO_FS(dpc,q,p7X_C0), MMO_FS(dpc,q,p7X_C4));
+      MMO_FS(dpc,q,p7X_C0) = _mm_add_ps( MMO_FS(dpc,q,p7X_C0), MMO_FS(dpc,q,p7X_C5));
 
-	  /* add match states E state */
-	  xEv  = _mm_add_ps(xEv, MMO_FS(dpc,q,p7X_C0));
-	
-	  /* shift i values for M->D calculation */
-	  mdv = _mm_shuffle_ps(mdv, MMO_FS(dpc,q,p7X_C0), _MM_SHUFFLE(0, 0, 3, 3));
- 		  mdv = _mm_shuffle_ps(mdv, MMO_FS(dpc,q,p7X_C0), _MM_SHUFFLE(2, 1, 2, 1));
+      /* add match states E state */
+      xEv  = _mm_add_ps(xEv, MMO_FS(dpc,q,p7X_C0));
 
-	  	  /* partial delete state pobability, M->D only */
-	  DMO_FS(dpc,q)   = _mm_mul_ps(mdv, *tp); tp++;
+      /* shift i values for M->D calculation */
+      mdv = _mm_shuffle_ps(mdv, MMO_FS(dpc,q,p7X_C0), _MM_SHUFFLE(0, 0, 3, 3));
+      mdv = _mm_shuffle_ps(mdv, MMO_FS(dpc,q,p7X_C0), _MM_SHUFFLE(2, 1, 2, 1));
 
-/* Now the DD paths. We would rather not serialize them but 
+      /* partial delete state pobability, M->D only */
+      DMO_FS(dpc,q)   = _mm_mul_ps(mdv, *tp); tp++;
+
+      /* Now the DD paths. We would rather not serialize them but 
        * in an accurate Forward calculation, we have few options.
        */
-	  
-/* serailization of d->d */
-	  tD.v = DMO_FS(dpc,q);
-	  DD.v = *tp; tp++;
+      tD.v = DMO_FS(dpc,q);
+      DD.v = *tp; tp++;
 
-	  tD.f[0] += dd * DD.f[0];	
-	  for (j = 1; j < 4; j++) 
-		tD.f[j] += tD.f[j-1] * DD.f[j];
+      tD.f[0] += dd * DD.f[0];	
+      for (j = 1; j < 4; j++) 
+        tD.f[j] += tD.f[j-1] * DD.f[j];
  
-	  /* combine D->D and M->D for total delete state probability */
-          DMO_FS(dpc,q) =  tD.v;	 
-			temp.v = DMO_FS(dpc,q);
-        printf("i %d q %d 0 %f 1 %f 2 %f 3 %f\n\n", i, q, temp.f[0], temp.f[1], temp.f[2], temp.f[3]);	  
+      DMO_FS(dpc,q) =  tD.v;	 
+	if(i == 3) {
+	 temp.v = DMO_FS(dpc,q);
 
-
-          /* Add D's to xEv */
-          xEv = _mm_add_ps(DMO_FS(dpc,q), xEv);
-
-	  /* Calculate and store I(i,q); assumes odds ratio for emission is 1.0 */
-	  icv           =                _mm_mul_ps(ox->dpf[i-3][q * p7X_NSCELLS_FS + p7X_M + p7X_C0], *tp);  tp++;
-	  IMO_FS(dpc,q) = _mm_add_ps(icv, _mm_mul_ps(ox->dpf[i-3][q * p7X_NSCELLS_FS + p7X_I], *tp)); tp++; 
-
-      	
-	  mpv = MMO_FS(dpp,q,p7X_C0);
-	  dpv = DMO_FS(dpp,q);
-	  ipv = IMO_FS(dpp,q);
-
-	  mdv = MMO_FS(dpc,q,p7X_C0);
-	  /* shift i values for D->D calculation */
-	  ddv = _mm_shuffle_ps(DMO_FS(dpc,q), DMO_FS(dpc,q), _MM_SHUFFLE(3, 3, 3, 3));  
-	  dd = _mm_cvtss_f32(ddv);
-//	  printf("DDD %f\n", dd);
-      } 
-      /* Finally the "special" states, which start from Mk->E (->C, ->J->B) */
-      
-      /* The following incantation is a horizontal sum of xEv's elements  */
-      xEv = _mm_add_ps(xEv, _mm_shuffle_ps(xEv, xEv, _MM_SHUFFLE(0, 3, 2, 1)));
-      xEv = _mm_add_ps(xEv, _mm_shuffle_ps(xEv, xEv, _MM_SHUFFLE(1, 0, 3, 2)));
-      _mm_store_ss(&xE, xEv);
-
-      xN =  ox->xmx[(i-3)*p7X_NXCELLS+p7X_N] * om->xf[p7O_N][p7O_LOOP];
-      xC = (ox->xmx[(i-3)*p7X_NXCELLS+p7X_C] * om->xf[p7O_C][p7O_LOOP]) +  (xE * om->xf[p7O_E][p7O_MOVE]);
-      xJ = (ox->xmx[(i-3)*p7X_NXCELLS+p7X_J] * om->xf[p7O_J][p7O_LOOP]) +  (xE * om->xf[p7O_E][p7O_LOOP]);
-      xB = (xJ * om->xf[p7O_J][p7O_MOVE]) +  (xN * om->xf[p7O_N][p7O_MOVE]);
-      /* and now xB will carry over into next i, and xC carries over after i=L */
-
-      /* Sparse rescaling. xE above threshold? trigger a rescaling event.            */
-      if (xE > 1.0e4)	/* that's a little less than e^10, ~10% of our dynamic range */
-	{
-	  xN  = xN / xE;
-	  xC  = xC / xE;
-	  xJ  = xJ / xE;
-	  xB  = xB / xE;
-	  xEv = _mm_set1_ps(1.0 / xE);
-	  for (q = 0; q < Q; q++)
-	    {
-	      MMO(dpc,q) = _mm_mul_ps(MMO(dpc,q), xEv);
-	      DMO(dpc,q) = _mm_mul_ps(DMO(dpc,q), xEv);
-	      IMO(dpc,q) = _mm_mul_ps(IMO(dpc,q), xEv);
-	    }
-	  ox->xmx[i*p7X_NXCELLS+p7X_SCALE] = xE;
-	  ox->totscale += log(xE);
-	  xE = 1.0;		
 	}
-      else ox->xmx[i*p7X_NXCELLS+p7X_SCALE] = 1.0;
 
-      /* Storage of the specials.  We could've stored these already
-       * but using xE, etc. variables makes it easy to convert this
-       * code to O(M) memory versions just by deleting storage steps.
-       */
-      ox->xmx[i*p7X_NXCELLS+p7X_E] = xE;
-      ox->xmx[i*p7X_NXCELLS+p7X_N] = xN;
-      ox->xmx[i*p7X_NXCELLS+p7X_J] = xJ;
-      ox->xmx[i*p7X_NXCELLS+p7X_B] = xB;
-      ox->xmx[i*p7X_NXCELLS+p7X_C] = xC;
+      /* Add D's to xEv */
+      xEv = _mm_add_ps(DMO_FS(dpc,q), xEv);
+ 
+      /* Calculate and store I(i,q); assumes odds ratio for emission is 1.0 */
+      IMO_FS(dpc,q) = _mm_mul_ps(ox->dpf[i-3][q * p7X_NSCELLS_FS + p7X_M + p7X_C0], *tp);  tp++;
+     IMO_FS(dpc,q) = _mm_add_ps(IMO_FS(dpc,q), _mm_mul_ps(ox->dpf[i-3][q * p7X_NSCELLS_FS + p7X_I], *tp)); tp++; 
+ 
+      mpv = MMO_FS(dpp,q,p7X_C0);
+      dpv = DMO_FS(dpp,q);
+      ipv = IMO_FS(dpp,q);
+      
+      mdv = MMO_FS(dpc,q,p7X_C0);
+	  
+      /* shift i values for D->D calculation */
+      ddv = _mm_shuffle_ps(DMO_FS(dpc,q), DMO_FS(dpc,q), _MM_SHUFFLE(3, 3, 3, 3));  
+      dd = _mm_cvtss_f32(ddv);
+    } 
+      
+    /* Finally the "special" states, which start from Mk->E (->C, ->J->B) */
+      
+    /* The following incantation is a horizontal sum of xEv's elements  */
+    xEv = _mm_add_ps(xEv, _mm_shuffle_ps(xEv, xEv, _MM_SHUFFLE(0, 3, 2, 1)));
+    xEv = _mm_add_ps(xEv, _mm_shuffle_ps(xEv, xEv, _MM_SHUFFLE(1, 0, 3, 2)));
+    _mm_store_ss(&xE, xEv);
+
+    xN =  ox->xmx[(i-3)*p7X_NXCELLS+p7X_N] * om->xf[p7O_N][p7O_LOOP];
+    xC = (ox->xmx[(i-3)*p7X_NXCELLS+p7X_C] * om->xf[p7O_C][p7O_LOOP]) +  (xE * om->xf[p7O_E][p7O_MOVE]);
+    xJ = (ox->xmx[(i-3)*p7X_NXCELLS+p7X_J] * om->xf[p7O_J][p7O_LOOP]) +  (xE * om->xf[p7O_E][p7O_LOOP]);
+    xB = (xJ * om->xf[p7O_J][p7O_MOVE]) +  (xN * om->xf[p7O_N][p7O_MOVE]);
+    /* and now xB will carry over into next i, and xC carries over after i=L */
+    /* Sparse rescaling. xE above threshold? trigger a rescaling event.            */
+
+#if 0
+    if (xE > 1.0e4)	/* that's a little less than e^10, ~10% of our dynamic range */
+    {
+      xN  = xN / xE;
+      xC  = xC / xE;
+      xJ  = xJ / xE;
+      xB  = xB / xE;
+      xEv = _mm_set1_ps(1.0 / xE);
+      for (q = 0; q < Q; q++)
+      {
+        MMO_FS(dpc,q, p7X_C0) = _mm_mul_ps(MMO_FS(dpc,q,p7X_C0), xEv);
+        MMO_FS(dpc,q, p7X_C1) = _mm_mul_ps(MMO_FS(dpc,q,p7X_C1), xEv);
+        MMO_FS(dpc,q, p7X_C2) = _mm_mul_ps(MMO_FS(dpc,q,p7X_C2), xEv);
+        MMO_FS(dpc,q, p7X_C3) = _mm_mul_ps(MMO_FS(dpc,q,p7X_C3), xEv);
+        MMO_FS(dpc,q, p7X_C4) = _mm_mul_ps(MMO_FS(dpc,q,p7X_C4), xEv);
+        MMO_FS(dpc,q, p7X_C5) = _mm_mul_ps(MMO_FS(dpc,q,p7X_C5), xEv);
+	DMO_FS(dpc,q) = _mm_mul_ps(DMO_FS(dpc,q), xEv);
+	IMO_FS(dpc,q) = _mm_mul_ps(IMO_FS(dpc,q), xEv);
+      }
+      ox->xmx[i*p7X_NXCELLS+p7X_SCALE] = xE;
+
+      ox->totscale += log(xE);
+      
+      xE = 1.0;		
+    }
+    else ox->xmx[i*p7X_NXCELLS+p7X_SCALE] = 1.0;
+#endif
+
+    /* Storage of the specials.  We could've stored these already
+     * but using xE, etc. variables makes it easy to convert this
+     * code to O(M) memory versions just by deleting storage steps.
+     */
+    ox->xmx[i*p7X_NXCELLS+p7X_E] = xE;
+    ox->xmx[i*p7X_NXCELLS+p7X_N] = xN;
+    ox->xmx[i*p7X_NXCELLS+p7X_J] = xJ;
+    ox->xmx[i*p7X_NXCELLS+p7X_B] = xB;
+    ox->xmx[i*p7X_NXCELLS+p7X_C] = xC;
 
 #if eslDEBUGLEVEL > 0
-      if (ox->debugging) p7_omx_fs_DumpFBRow(ox, TRUE, i, 9, 5, xE, xN, xJ, xB, xC);	/* logify=TRUE, <rowi>=i, width=8, precision=5*/
+   if (ox->debugging) p7_omx_fs_DumpFBRow(ox, FALSE, i, 9, 5, xE, xN, xJ, xB, xC);	/* logify=TRUE, <rowi>=i, width=8, precision=5*/
 #endif
-    } /* end loop over sequence residues 1..L */
+  } /* end loop over sequence residues 1..L */
 
   /* finally C->T, and flip total score back to log space (nats) */
   /* On overflow, xC is inf or nan (nan arises because inf*0 = nan). */
@@ -590,7 +437,7 @@ union   { __m128 v; float f[4]; } temp;
   else if  (L>0 && xC == 0.0) ESL_EXCEPTION(eslERANGE, "forward score underflow (is 0.0)");     /* if L==0, xC *should* be 0.0; J5/118 */
   else if  (isinf(xC) == 1)   ESL_EXCEPTION(eslERANGE, "forward score overflow (is infinity)");
 
-  if (opt_sc != NULL) *opt_sc = ox->totscale + log(xC * om->xf[p7O_C][p7O_MOVE]);
+  if (opt_sc != NULL) *opt_sc = log(xC * om->xf[p7O_C][p7O_MOVE]);
   
   if(ivv_mem != NULL) free(ivv_mem);
   if(ivv     != NULL) free(ivv);
@@ -604,737 +451,5 @@ ERROR:
 }
 
 
-#if 0
-static int 
-backward_engine(int do_full, const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, const P7_OMX *fwd, P7_OMX *bck, float *opt_sc)
-{
-  register __m128 mpv, ipv, dpv;      /* previous row values                                       */
-  register __m128 mcv, dcv;           /* current row values                                        */
-  register __m128 tmmv, timv, tdmv;   /* tmp vars for accessing rotated transition scores          */
-  register __m128 xBv;		      /* collects B->Mk components of B(i)                         */
-  register __m128 xEv;	              /* splatted E(i)                                             */
-  __m128   zerov;		      /* splatted 0.0's in a vector                                */
-  float    xN, xE, xB, xC, xJ;	      /* special states' scores                                    */
-  int      i;			      /* counter over sequence positions 0,1..L                    */
-  int      q;			      /* counter over quads 0..Q-1                                 */
-  int      Q       = p7O_NQF(om->M);  /* segment length: # of vectors                              */
-  int      j;			      /* DD segment iteration counter (4 = full serialization)     */
-  __m128  *dpc;                       /* current DP row                                            */
-  __m128  *dpp;			      /* next ("previous") DP row                                  */
-  __m128  *rp;			      /* will point into om->rfv[x] for residue x[i+1]             */
-  __m128  *tp;		              /* will point into (and step thru) om->tfv transition scores */
 
-  /* initialize the L row. */
-  bck->M = om->M;
-  bck->L = L;
-  bck->has_own_scales = FALSE;	/* backwards scale factors are *usually* given by <fwd> */
-  dpc    = bck->dpf[L * do_full];
-  xJ     = 0.0;
-  xB     = 0.0;
-  xN     = 0.0;
-  xC     = om->xf[p7O_C][p7O_MOVE];      /* C<-T */
-  xE     = xC * om->xf[p7O_E][p7O_MOVE]; /* E<-C, no tail */
-  xEv    = _mm_set1_ps(xE); 
-  zerov  = _mm_setzero_ps();  
-  dcv    = zerov;		/* solely to silence a compiler warning */
-  for (q = 0; q < Q; q++) MMO(dpc,q) = DMO(dpc,q) = xEv;
-  for (q = 0; q < Q; q++) IMO(dpc,q) = zerov;
-
-  /* init row L's DD paths, 1) first segment includes xE, from DMO(q) */
-  tp  = om->tfv + 8*Q - 1;	                        /* <*tp> now the [4 8 12 x] TDD quad         */
-  dpv = _mm_move_ss(DMO(dpc,Q-1), zerov);               /* start leftshift: [1 5 9 13] -> [x 5 9 13] */
-  dpv = _mm_shuffle_ps(dpv, dpv, _MM_SHUFFLE(0,3,2,1)); /* finish leftshift:[x 5 9 13] -> [5 9 13 x] */
-  for (q = Q-1; q >= 0; q--)
-    {
-      dcv        = _mm_mul_ps(dpv, *tp);      tp--;
-      DMO(dpc,q) = _mm_add_ps(DMO(dpc,q), dcv);
-      dpv        = DMO(dpc,q);
-    }
-  /* 2) three more passes, only extending DD component (dcv only; no xE contrib from DMO(q)) */
-  for (j = 1; j < 4; j++)
-    {
-      tp  = om->tfv + 8*Q - 1;	                            /* <*tp> now the [4 8 12 x] TDD quad         */
-      dcv = _mm_move_ss(dcv, zerov);                        /* start leftshift: [1 5 9 13] -> [x 5 9 13] */
-      dcv = _mm_shuffle_ps(dcv, dcv, _MM_SHUFFLE(0,3,2,1)); /* finish leftshift:[x 5 9 13] -> [5 9 13 x] */
-      for (q = Q-1; q >= 0; q--)
-	{
-	  dcv        = _mm_mul_ps(dcv, *tp); tp--;
-	  DMO(dpc,q) = _mm_add_ps(DMO(dpc,q), dcv);
-	}
-    }
-  /* now MD init */
-  tp  = om->tfv + 7*Q - 3;	                        /* <*tp> now the [4 8 12 x] Mk->Dk+1 quad    */
-  dcv = _mm_move_ss(DMO(dpc,0), zerov);                 /* start leftshift: [1 5 9 13] -> [x 5 9 13] */
-  dcv = _mm_shuffle_ps(dcv, dcv, _MM_SHUFFLE(0,3,2,1)); /* finish leftshift:[x 5 9 13] -> [5 9 13 x] */
-  for (q = Q-1; q >= 0; q--)
-    {
-      MMO(dpc,q) = _mm_add_ps(MMO(dpc,q), _mm_mul_ps(dcv, *tp)); tp -= 7;
-      dcv        = DMO(dpc,q);
-    }
-
-  /* Sparse rescaling: same scale factors as fwd matrix */
-  if (fwd->xmx[L*p7X_NXCELLS+p7X_SCALE] > 1.0)
-    {
-      xE  = xE / fwd->xmx[L*p7X_NXCELLS+p7X_SCALE];
-      xN  = xN / fwd->xmx[L*p7X_NXCELLS+p7X_SCALE];
-      xC  = xC / fwd->xmx[L*p7X_NXCELLS+p7X_SCALE];
-      xJ  = xJ / fwd->xmx[L*p7X_NXCELLS+p7X_SCALE];
-      xB  = xB / fwd->xmx[L*p7X_NXCELLS+p7X_SCALE];
-      xEv = _mm_set1_ps(1.0 / fwd->xmx[L*p7X_NXCELLS+p7X_SCALE]);
-      for (q = 0; q < Q; q++) {
-	MMO(dpc,q) = _mm_mul_ps(MMO(dpc,q), xEv);
-	DMO(dpc,q) = _mm_mul_ps(DMO(dpc,q), xEv);
-	IMO(dpc,q) = _mm_mul_ps(IMO(dpc,q), xEv);
-      }
-    }
-  bck->xmx[L*p7X_NXCELLS+p7X_SCALE] = fwd->xmx[L*p7X_NXCELLS+p7X_SCALE];
-  bck->totscale                     = log(bck->xmx[L*p7X_NXCELLS+p7X_SCALE]);
-
-  /* Stores */
-  bck->xmx[L*p7X_NXCELLS+p7X_E] = xE;
-  bck->xmx[L*p7X_NXCELLS+p7X_N] = xN;
-  bck->xmx[L*p7X_NXCELLS+p7X_J] = xJ;
-  bck->xmx[L*p7X_NXCELLS+p7X_B] = xB;
-  bck->xmx[L*p7X_NXCELLS+p7X_C] = xC;
-
-#if eslDEBUGLEVEL > 0
-  if (bck->debugging) p7_omx_DumpFBRow(bck, TRUE, L, 9, 4, xE, xN, xJ, xB, xC);	/* logify=TRUE, <rowi>=L, width=9, precision=4*/
-#endif
-
-  /* main recursion */
-  for (i = L-1; i >= 1; i--)	/* backwards stride */
-    {
-      /* phase 1. B(i) collected. Old row destroyed, new row contains
-       *    complete I(i,k), partial {MD}(i,k) w/ no {MD}->{DE} paths yet.
-       */
-      dpc = bck->dpf[i     * do_full];
-      dpp = bck->dpf[(i+1) * do_full];
-      rp  = om->rfv[dsq[i+1]] + Q-1; /* <*rp> is now the [4 8 12 x] match emission quad */
-      tp  = om->tfv + 7*Q - 1;	     /* <*tp> is now the [4 8 12 x] TII transition quad  */
-
-      /* leftshift the first transition quads */
-      tmmv = _mm_move_ss(om->tfv[1], zerov); tmmv = _mm_shuffle_ps(tmmv, tmmv, _MM_SHUFFLE(0,3,2,1));
-      timv = _mm_move_ss(om->tfv[2], zerov); timv = _mm_shuffle_ps(timv, timv, _MM_SHUFFLE(0,3,2,1));
-      tdmv = _mm_move_ss(om->tfv[3], zerov); tdmv = _mm_shuffle_ps(tdmv, tdmv, _MM_SHUFFLE(0,3,2,1));
-
-      mpv = _mm_mul_ps(MMO(dpp,0), om->rfv[dsq[i+1]][0]); /* precalc M(i+1,k+1) * e(M_k+1, x_{i+1}) */
-      mpv = _mm_move_ss(mpv, zerov);
-      mpv = _mm_shuffle_ps(mpv, mpv, _MM_SHUFFLE(0,3,2,1));
-
-      xBv = zerov;
-      for (q = Q-1; q >= 0; q--)     /* backwards stride */
-	{
-	  ipv = IMO(dpp,q); /* assumes emission odds ratio of 1.0; i+1's IMO(q) now free */
-	  IMO(dpc,q) = _mm_add_ps(_mm_mul_ps(ipv, *tp), _mm_mul_ps(mpv, timv));   tp--;
-	  DMO(dpc,q) =                                  _mm_mul_ps(mpv, tdmv); 
-	  mcv        = _mm_add_ps(_mm_mul_ps(ipv, *tp), _mm_mul_ps(mpv, tmmv));   tp-= 2;
-	  
-	  mpv        = _mm_mul_ps(MMO(dpp,q), *rp);  rp--;  /* obtain mpv for next q. i+1's MMO(q) is freed  */
-	  MMO(dpc,q) = mcv;
-
-	  tdmv = *tp;   tp--;
-	  timv = *tp;   tp--;
-	  tmmv = *tp;   tp--;
-
-	  xBv = _mm_add_ps(xBv, _mm_mul_ps(mpv, *tp)); tp--;
-	}
-
-      /* phase 2: now that we have accumulated the B->Mk transitions in xBv, we can do the specials */
-      /* this incantation is a horiz sum of xBv elements: (_mm_hadd_ps() would require SSE3) */
-      xBv = _mm_add_ps(xBv, _mm_shuffle_ps(xBv, xBv, _MM_SHUFFLE(0, 3, 2, 1)));
-      xBv = _mm_add_ps(xBv, _mm_shuffle_ps(xBv, xBv, _MM_SHUFFLE(1, 0, 3, 2)));
-      _mm_store_ss(&xB, xBv);
-
-      xC =  xC * om->xf[p7O_C][p7O_LOOP];
-      xJ = (xB * om->xf[p7O_J][p7O_MOVE]) + (xJ * om->xf[p7O_J][p7O_LOOP]); /* must come after xB */
-      xN = (xB * om->xf[p7O_N][p7O_MOVE]) + (xN * om->xf[p7O_N][p7O_LOOP]); /* must come after xB */
-      xE = (xC * om->xf[p7O_E][p7O_MOVE]) + (xJ * om->xf[p7O_E][p7O_LOOP]); /* must come after xJ, xC */
-      xEv = _mm_set1_ps(xE);	/* splat */
-
-
-      /* phase 3: {MD}->E paths and one step of the D->D paths */
-      tp  = om->tfv + 8*Q - 1;	/* <*tp> now the [4 8 12 x] TDD quad */
-      dpv = _mm_add_ps(DMO(dpc,0), xEv);
-      dpv = _mm_move_ss(dpv, zerov);
-      dpv = _mm_shuffle_ps(dpv, dpv, _MM_SHUFFLE(0,3,2,1));
-      for (q = Q-1; q >= 0; q--)
-	{
-	  dcv        = _mm_mul_ps(dpv, *tp); tp--;
-	  DMO(dpc,q) = _mm_add_ps(DMO(dpc,q), _mm_add_ps(dcv, xEv));
-	  dpv        = DMO(dpc,q);
-	  MMO(dpc,q) = _mm_add_ps(MMO(dpc,q), xEv);
-	}
-      
-      /* phase 4: finish extending the DD paths */
-      /* fully serialized for now */
-      for (j = 1; j < 4; j++)	/* three passes: we've already done 1 segment, we need 4 total */
-	{
-	  dcv = _mm_move_ss(dcv, zerov);
-	  dcv = _mm_shuffle_ps(dcv, dcv, _MM_SHUFFLE(0,3,2,1));
-	  tp  = om->tfv + 8*Q - 1;	/* <*tp> now the [4 8 12 x] TDD quad */
-	  for (q = Q-1; q >= 0; q--)
-	    {
-	      dcv        = _mm_mul_ps(dcv, *tp); tp--;
-	      DMO(dpc,q) = _mm_add_ps(DMO(dpc,q), dcv);
-	    }
-	}
-
-      /* phase 5: add M->D paths */
-      dcv = _mm_move_ss(DMO(dpc,0), zerov);
-      dcv = _mm_shuffle_ps(dcv, dcv, _MM_SHUFFLE(0,3,2,1));
-      tp  = om->tfv + 7*Q - 3;	/* <*tp> is now the [4 8 12 x] Mk->Dk+1 quad */
-      for (q = Q-1; q >= 0; q--)
-	{
-	  MMO(dpc,q) = _mm_add_ps(MMO(dpc,q), _mm_mul_ps(dcv, *tp)); tp -= 7;
-	  dcv        = DMO(dpc,q);
-	}
-
-      /* Sparse rescaling  */
-
-      /* In rare cases [J3/119] scale factors from <fwd> are
-       * insufficient and backwards will overflow. In this case, we
-       * switch on the fly to using our own scale factors, different
-       * from those in <fwd>. This will complicate subsequent
-       * posterior decoding routines.
-       */
-      if (xB > 1.0e16) bck->has_own_scales = TRUE;
-
-      if      (bck->has_own_scales)  bck->xmx[i*p7X_NXCELLS+p7X_SCALE] = (xB > 1.0e4) ? xB : 1.0;
-      else                           bck->xmx[i*p7X_NXCELLS+p7X_SCALE] = fwd->xmx[i*p7X_NXCELLS+p7X_SCALE];
-
-      if (bck->xmx[i*p7X_NXCELLS+p7X_SCALE] > 1.0)
-	{
-	  xE /= bck->xmx[i*p7X_NXCELLS+p7X_SCALE];
-	  xN /= bck->xmx[i*p7X_NXCELLS+p7X_SCALE];
-	  xJ /= bck->xmx[i*p7X_NXCELLS+p7X_SCALE];
-	  xB /= bck->xmx[i*p7X_NXCELLS+p7X_SCALE];
-	  xC /= bck->xmx[i*p7X_NXCELLS+p7X_SCALE];
-	  xBv = _mm_set1_ps(1.0 / bck->xmx[i*p7X_NXCELLS+p7X_SCALE]);
-	  for (q = 0; q < Q; q++) {
-	    MMO(dpc,q) = _mm_mul_ps(MMO(dpc,q), xBv);
-	    DMO(dpc,q) = _mm_mul_ps(DMO(dpc,q), xBv);
-	    IMO(dpc,q) = _mm_mul_ps(IMO(dpc,q), xBv);
-	  }
-	  bck->totscale += log(bck->xmx[i*p7X_NXCELLS+p7X_SCALE]);
-	}
-
-      /* Stores are separate only for pedagogical reasons: easy to
-       * turn this into a more memory efficient version just by
-       * deleting the stores.
-       */
-      bck->xmx[i*p7X_NXCELLS+p7X_E] = xE;
-      bck->xmx[i*p7X_NXCELLS+p7X_N] = xN;
-      bck->xmx[i*p7X_NXCELLS+p7X_J] = xJ;
-      bck->xmx[i*p7X_NXCELLS+p7X_B] = xB;
-      bck->xmx[i*p7X_NXCELLS+p7X_C] = xC;
-
-#if eslDEBUGLEVEL > 0
-      if (bck->debugging) p7_omx_DumpFBRow(bck, TRUE, i, 9, 4, xE, xN, xJ, xB, xC);	/* logify=TRUE, <rowi>=i, width=9, precision=4*/
-#endif
-    } /* thus ends the loop over sequence positions i */
-
-  /* Termination at i=0, where we can only reach N,B states. */
-  dpp = bck->dpf[1 * do_full];
-  tp  = om->tfv;          /* <*tp> is now the [1 5 9 13] TBMk transition quad  */
-  rp  = om->rfv[dsq[1]];  /* <*rp> is now the [1 5 9 13] match emission quad   */
-  xBv = zerov;
-  for (q = 0; q < Q; q++)
-    {
-      mpv = _mm_mul_ps(MMO(dpp,q), *rp);  rp++;
-      mpv = _mm_mul_ps(mpv,        *tp);  tp += 7;
-      xBv = _mm_add_ps(xBv,        mpv);
-    }
-  /* horizontal sum of xBv */
-  xBv = _mm_add_ps(xBv, _mm_shuffle_ps(xBv, xBv, _MM_SHUFFLE(0, 3, 2, 1)));
-  xBv = _mm_add_ps(xBv, _mm_shuffle_ps(xBv, xBv, _MM_SHUFFLE(1, 0, 3, 2)));
-  _mm_store_ss(&xB, xBv);
- 
-  xN = (xB * om->xf[p7O_N][p7O_MOVE]) + (xN * om->xf[p7O_N][p7O_LOOP]);  
-
-  bck->xmx[p7X_B]     = xB;
-  bck->xmx[p7X_C]     = 0.0;
-  bck->xmx[p7X_J]     = 0.0;
-  bck->xmx[p7X_N]     = xN;
-  bck->xmx[p7X_E]     = 0.0;
-  bck->xmx[p7X_SCALE] = 1.0;
-
-#if eslDEBUGLEVEL > 0
-  dpc = bck->dpf[0];
-  for (q = 0; q < Q; q++) /* Not strictly necessary, but if someone's looking at DP matrices, this is nice to do: */
-    MMO(dpc,q) = DMO(dpc,q) = IMO(dpc,q) = zerov;
-  if (bck->debugging) p7_omx_DumpFBRow(bck, TRUE, 0, 9, 4, bck->xmx[p7X_E], bck->xmx[p7X_N],  bck->xmx[p7X_J], bck->xmx[p7X_B],  bck->xmx[p7X_C]);	/* logify=TRUE, <rowi>=0, width=9, precision=4*/
-#endif
-
-  if       (isnan(xN))        ESL_EXCEPTION(eslERANGE, "backward score is NaN");
-  else if  (L>0 && xN == 0.0) ESL_EXCEPTION(eslERANGE, "backward score underflow (is 0.0)");    /* if L==0, xN *should* be 0.0 [J5/118]*/
-  else if  (isinf(xN) == 1)   ESL_EXCEPTION(eslERANGE, "backward score overflow (is infinity)");
-
-  if (opt_sc != NULL) *opt_sc = bck->totscale + log(xN);
-  return eslOK;
-}
-
-#endif
-
-/*-------------- end, forward/backward engines  -----------------*/
-
-
-
-
-
-/*****************************************************************
- * 4. Benchmark driver.
- *****************************************************************/
-#ifdef p7FWDBACK_BENCHMARK
-/* -c, -x options are for debugging and testing: see fwdfilter.c for explanation */
-/* 
-   icc  -O3 -static -o fwdback_benchmark -I.. -L.. -I../../easel -L../../easel -Dp7FWDBACK_BENCHMARK fwdback.c -lhmmer -leasel -lm 
-
-   ./fwdback_benchmark <hmmfile>           runs benchmark on both Forward and Backward parser
-   ./fwdback_benchmark -c -N100 <hmmfile>  compare scores of SSE to generic impl
-   ./fwdback_benchmark -x -N100 <hmmfile>  test that scores match trusted implementation.
- */
-#include "p7_config.h"
-
-#include "easel.h"
-#include "esl_alphabet.h"
-#include "esl_getopts.h"
-#include "esl_random.h"
-#include "esl_randomseq.h"
-#include "esl_stopwatch.h"
-
-#include "hmmer.h"
-#include "impl_sse.h"
-
-static ESL_OPTIONS options[] = {
-  /* name           type      default  env  range toggles reqs incomp  help                                       docgroup*/
-  { "-h",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "show brief help on version and usage",             0 },
-  { "-c",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, "-x", "compare scores to generic implementation (debug)", 0 }, 
-  { "-s",        eslARG_INT,     "42", NULL, NULL,  NULL,  NULL, NULL, "set random number seed to <n>",                    0 },
-  { "-x",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, "-c", "equate scores to trusted implementation (debug)",  0 },
-  { "-L",        eslARG_INT,    "400", NULL, "n>0", NULL,  NULL, NULL, "length of random target seqs",                     0 },
-  { "-N",        eslARG_INT,  "50000", NULL, "n>0", NULL,  NULL, NULL, "number of random target seqs",                     0 },
-  { "-F",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, "-B", "only benchmark Forward",                           0 },
-  { "-B",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, "-F", "only benchmark Backward",                          0 },
-  { "-P",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "benchmark parsing version, not full version",      0 },
-  {  0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-};
-static char usage[]  = "[-options] <hmmfile>";
-static char banner[] = "benchmark driver for Forward, Backward implementations";
-
-int 
-main(int argc, char **argv)
-{
-  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 1, argc, argv, banner, usage);
-  char           *hmmfile = esl_opt_GetArg(go, 1);
-  ESL_STOPWATCH  *w       = esl_stopwatch_Create();
-  ESL_RANDOMNESS *r       = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
-  ESL_ALPHABET   *abc     = NULL;
-  P7_HMMFILE     *hfp     = NULL;
-  P7_HMM         *hmm     = NULL;
-  P7_BG          *bg      = NULL;
-  P7_PROFILE     *gm      = NULL;
-  P7_OPROFILE    *om      = NULL;
-  P7_GMX         *gx      = NULL;
-  P7_OMX         *fwd     = NULL;
-  P7_OMX         *bck     = NULL;
-  int             L       = esl_opt_GetInteger(go, "-L");
-  int             N       = esl_opt_GetInteger(go, "-N");
-  ESL_DSQ        *dsq     = malloc(sizeof(ESL_DSQ) * (L+2));
-  int             i;
-  float           fsc, bsc;
-  float           fsc2, bsc2;
-  double          base_time, bench_time, Mcs;
-
-  p7_FLogsumInit();
-
-  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
-
-  bg = p7_bg_Create(abc);
-  p7_bg_SetLength(bg, L);
-  gm = p7_profile_Create(hmm->M, abc);
-  p7_ProfileConfig(hmm, bg, gm, L, p7_LOCAL);
-  om = p7_oprofile_Create(gm->M, abc);
-  p7_oprofile_Convert(gm, om);
-  p7_oprofile_ReconfigLength(om, L);
-
-  if (esl_opt_GetBoolean(go, "-x") && p7_FLogsumError(-0.4, -0.5) > 0.0001)
-    p7_Fail("-x here requires p7_Logsum() recompiled in slow exact mode");
-
-  if (esl_opt_GetBoolean(go, "-P")) {
-    fwd = p7_omx_Create(gm->M, 0, L);
-    bck = p7_omx_Create(gm->M, 0, L);
-  } else {
-    fwd = p7_omx_Create(gm->M, L, L);
-    bck = p7_omx_Create(gm->M, L, L);
-  }
-  gx  = p7_gmx_Create(gm->M, L);
-
-  /* Get a baseline time: how long it takes just to generate the sequences */
-  esl_stopwatch_Start(w);
-  for (i = 0; i < N; i++) esl_rsq_xfIID(r, bg->f, abc->K, L, dsq);
-  esl_stopwatch_Stop(w);
-  base_time = w->user;
-
-  esl_stopwatch_Start(w);
-  for (i = 0; i < N; i++)
-    {
-      esl_rsq_xfIID(r, bg->f, abc->K, L, dsq);
-      if (esl_opt_GetBoolean(go, "-P")) {
-	if (! esl_opt_GetBoolean(go, "-B"))  p7_ForwardParser (dsq, L, om,      fwd, &fsc);
-	if (! esl_opt_GetBoolean(go, "-F"))  p7_BackwardParser(dsq, L, om, fwd, bck, &bsc);
-      } else {
-	if (! esl_opt_GetBoolean(go, "-B"))  p7_Forward (dsq, L, om,      fwd, &fsc);
-	if (! esl_opt_GetBoolean(go, "-F"))  p7_Backward(dsq, L, om, fwd, bck, &bsc);
-      }
-
-      if (esl_opt_GetBoolean(go, "-c") || esl_opt_GetBoolean(go, "-x"))
-	{
-	  p7_GForward (dsq, L, gm, gx, &fsc2); 
-	  p7_GBackward(dsq, L, gm, gx, &bsc2); 
-	  printf("%.4f %.4f %.4f %.4f\n", fsc, bsc, fsc2, bsc2);  
-	}
-    }
-  esl_stopwatch_Stop(w);
-  bench_time = w->user - base_time;
-  Mcs        = (double) N * (double) L * (double) gm->M * 1e-6 / (double) bench_time;
-  esl_stopwatch_Display(stdout, w, "# CPU time: ");
-  printf("# M    = %d\n",   gm->M);
-  printf("# %.1f Mc/s\n", Mcs);
-
-  free(dsq);
-  p7_omx_Destroy(bck);
-  p7_omx_Destroy(fwd);
-  p7_gmx_Destroy(gx);
-  p7_oprofile_Destroy(om);
-  p7_profile_Destroy(gm);
-  p7_bg_Destroy(bg);
-  p7_hmm_Destroy(hmm);
-  p7_hmmfile_Close(hfp);
-  esl_alphabet_Destroy(abc);
-  esl_stopwatch_Destroy(w);
-  esl_randomness_Destroy(r);
-  esl_getopts_Destroy(go);
-  return 0;
-}
-#endif /*p7FWDBACK_BENCHMARK*/
-/*------------------- end, benchmark driver ---------------------*/
-
-
-
-
-
-/*****************************************************************
- * 5. Unit tests.
- *****************************************************************/
-#ifdef p7FWDBACK_TESTDRIVE
-#include "esl_random.h"
-#include "esl_randomseq.h"
-
-/* 
- * compare to GForward() scores.
- */
-static void
-utest_fwdback(ESL_RANDOMNESS *r, ESL_ALPHABET *abc, P7_BG *bg, int M, int L, int N)
-{
-  char        *msg = "forward/backward unit test failed";
-  P7_HMM      *hmm = NULL;
-  P7_PROFILE  *gm  = NULL;
-  P7_OPROFILE *om  = NULL;
-  ESL_DSQ     *dsq = malloc(sizeof(ESL_DSQ) * (L+2));
-  P7_OMX      *fwd = p7_omx_Create(M, 0, L);
-  P7_OMX      *bck = p7_omx_Create(M, 0, L);
-  P7_OMX      *oxf = p7_omx_Create(M, L, L);
-  P7_OMX      *oxb = p7_omx_Create(M, L, L);
-  P7_GMX      *gx  = p7_gmx_Create(M, L);
-  float tolerance;
-  float fsc1, fsc2;
-  float bsc1, bsc2;
-  float generic_sc;
-
-  p7_FLogsumInit();
-  if (p7_FLogsumError(-0.4, -0.5) > 0.0001) tolerance = 1.0;  /* weaker test against GForward()   */
-  else tolerance = 0.0001;   /* stronger test: FLogsum() is in slow exact mode. */
-
-  p7_oprofile_Sample(r, abc, bg, M, L, &hmm, &gm, &om);
-  while (N--)
-    {
-      esl_rsq_xfIID(r, bg->f, abc->K, L, dsq);
-
-      p7_Forward       (dsq, L, om, oxf,      &fsc1);
-      p7_Backward      (dsq, L, om, oxf, oxb, &bsc1);
-      p7_ForwardParser (dsq, L, om, fwd,      &fsc2);
-      p7_BackwardParser(dsq, L, om, fwd, bck, &bsc2);
-      p7_GForward      (dsq, L, gm, gx,  &generic_sc);
-
-      /* Forward and Backward scores should agree with high tolerance */
-      if (fabs(fsc1-bsc1) > 0.0001)    esl_fatal(msg);
-      if (fabs(fsc2-bsc2) > 0.0001)    esl_fatal(msg);
-      if (fabs(fsc1-fsc2) > 0.0001)    esl_fatal(msg);
-
-      /* GForward scores should approximate Forward scores, 
-       * with tolerance that depends on how logsum.c was compiled
-       */
-      if (fabs(fsc1-generic_sc) > tolerance) esl_fatal(msg);
-    }
-
-  free(dsq);
-  p7_hmm_Destroy(hmm);
-  p7_omx_Destroy(oxb);
-  p7_omx_Destroy(oxf);
-  p7_omx_Destroy(bck);
-  p7_omx_Destroy(fwd);
-  p7_gmx_Destroy(gx);
-  p7_profile_Destroy(gm);
-  p7_oprofile_Destroy(om);
-}
-#endif /*p7FWDBACK_TESTDRIVE*/
-/*---------------------- end, unit tests ------------------------*/
-
-
-
-
-/*****************************************************************
- * 6. Test driver
- *****************************************************************/
-#ifdef p7FWDBACK_TESTDRIVE
-/* 
-   gcc -g -Wall -msse2 -std=gnu99 -o fwdback_utest -I.. -L.. -I../../easel -L../../easel -Dp7FWDBACK_TESTDRIVE fwdback.c -lhmmer -leasel -lm
-   ./fwdback_utest
- */
-#include "p7_config.h"
-
-#include "easel.h"
-#include "esl_alphabet.h"
-#include "esl_getopts.h"
-#include "esl_random.h"
-
-#include "hmmer.h"
-#include "impl_sse.h"
-
-static ESL_OPTIONS options[] = {
-  /* name           type      default  env  range toggles reqs incomp  help                                       docgroup*/
-  { "-h",        eslARG_NONE,   FALSE, NULL, NULL,  NULL,  NULL, NULL, "show brief help on version and usage",           0 },
-  { "-s",        eslARG_INT,     "42", NULL, NULL,  NULL,  NULL, NULL, "set random number seed to <n>",                  0 },
-  { "-L",        eslARG_INT,    "200", NULL, NULL,  NULL,  NULL, NULL, "size of random sequences to sample",             0 },
-  { "-M",        eslARG_INT,    "145", NULL, NULL,  NULL,  NULL, NULL, "size of random models to sample",                0 },
-  { "-N",        eslARG_INT,    "100", NULL, NULL,  NULL,  NULL, NULL, "number of random sequences to sample",           0 },
-  {  0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-};
-static char usage[]  = "[-options]";
-static char banner[] = "test driver for SSE Forward, Backward implementations";
-
-int
-main(int argc, char **argv)
-{
-  ESL_GETOPTS    *go   = p7_CreateDefaultApp(options, 0, argc, argv, banner, usage);
-  ESL_RANDOMNESS *r    = esl_randomness_CreateFast(esl_opt_GetInteger(go, "-s"));
-  ESL_ALPHABET   *abc  = NULL;
-  P7_BG          *bg   = NULL;
-  int             M    = esl_opt_GetInteger(go, "-M");
-  int             L    = esl_opt_GetInteger(go, "-L");
-  int             N    = esl_opt_GetInteger(go, "-N");
-
-  /* First round of tests for DNA alphabets.  */
-  if ((abc = esl_alphabet_Create(eslDNA)) == NULL)  esl_fatal("failed to create alphabet");
-  if ((bg = p7_bg_Create(abc))            == NULL)  esl_fatal("failed to create null model");
-
-  utest_fwdback(r, abc, bg, M, L, N);   /* normal sized models */
-  utest_fwdback(r, abc, bg, 1, L, 10);  /* size 1 models       */
-  utest_fwdback(r, abc, bg, M, 1, 10);  /* size 1 sequences    */
-
-  esl_alphabet_Destroy(abc);
-  p7_bg_Destroy(bg);
-
-  /* Second round of tests for amino alphabets.  */
-  if ((abc = esl_alphabet_Create(eslAMINO)) == NULL)  esl_fatal("failed to create alphabet");
-  if ((bg = p7_bg_Create(abc))              == NULL)  esl_fatal("failed to create null model");
-
-  utest_fwdback(r, abc, bg, M, L, N);   
-  utest_fwdback(r, abc, bg, 1, L, 10);  
-  utest_fwdback(r, abc, bg, M, 1, 10);  
-
-  esl_alphabet_Destroy(abc);
-  p7_bg_Destroy(bg);
-
-  esl_getopts_Destroy(go);
-  esl_randomness_Destroy(r);
-  return eslOK;
-}
-#endif /*p7FWDBACK_TESTDRIVE*/
-/*--------------------- end, test driver ------------------------*/
-
-
-
-/*****************************************************************
- * 7. Example
- *****************************************************************/
-#ifdef p7FWDBACK_EXAMPLE
-/* Useful for debugging on small HMMs and sequences.
- * 
- * Compares to GForward().
- * 
-   gcc -g -Wall -msse2 -std=gnu99 -o fwdback_example -I.. -L.. -I../../easel -L../../easel -Dp7FWDBACK_EXAMPLE fwdback.c -lhmmer -leasel -lm
-   ./fwdback_example <hmmfile> <seqfile>
- */ 
-#include "p7_config.h"
-
-#include "easel.h"
-#include "esl_alphabet.h"
-#include "esl_exponential.h"
-#include "esl_getopts.h"
-#include "esl_sq.h"
-#include "esl_sqio.h"
-
-#include "hmmer.h"
-#include "impl_sse.h"
-
-#define STYLES     "--fs,--sw,--ls,--s"	               /* Exclusive choice for alignment mode     */
-
-static ESL_OPTIONS options[] = {
-  /* name           type      default  env  range  toggles reqs incomp  help                                       docgroup*/
-  { "-h",        eslARG_NONE,   FALSE, NULL, NULL,   NULL,  NULL, NULL, "show brief help on version and usage",             0 },
-  { "-1",        eslARG_NONE,   FALSE, NULL, NULL,   NULL,  NULL, NULL, "output in one line awkable format",                0 },
-  { "-P",        eslARG_NONE,   FALSE, NULL, NULL,   NULL,  NULL, NULL, "output in profmark format",                        0 },
-  { "--fs",      eslARG_NONE,"default",NULL, NULL, STYLES,  NULL, NULL, "multihit local alignment",                         0 },
-  { "--sw",      eslARG_NONE,   FALSE, NULL, NULL, STYLES,  NULL, NULL, "unihit local alignment",                           0 },
-  { "--ls",      eslARG_NONE,   FALSE, NULL, NULL, STYLES,  NULL, NULL, "multihit glocal alignment",                        0 },
-  { "--s",       eslARG_NONE,   FALSE, NULL, NULL, STYLES,  NULL, NULL, "unihit glocal alignment",                          0 },
-  {  0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-};
-static char usage[]  = "[-options] <hmmfile> <seqfile>";
-static char banner[] = "example of Forward/Backward (SSE versions)";
-
-int 
-main(int argc, char **argv)
-{
-  ESL_GETOPTS    *go      = p7_CreateDefaultApp(options, 2, argc, argv, banner, usage);
-  char           *hmmfile = esl_opt_GetArg(go, 1);
-  char           *seqfile = esl_opt_GetArg(go, 2);
-  ESL_ALPHABET   *abc     = NULL;
-  P7_HMMFILE     *hfp     = NULL;
-  P7_HMM         *hmm     = NULL;
-  P7_BG          *bg      = NULL;
-  P7_PROFILE     *gm      = NULL;
-  P7_OPROFILE    *om      = NULL;
-  P7_GMX         *gx      = NULL;
-  P7_OMX         *fwd     = NULL;
-  P7_OMX         *bck     = NULL;
-  ESL_SQ         *sq      = NULL;
-  ESL_SQFILE     *sqfp    = NULL;
-  int             format  = eslSQFILE_UNKNOWN;
-  float           fraw, braw, nullsc, fsc;
-  float           gfraw, gbraw, gfsc;
-  double          P, gP;
-  int             status;
-
-  /* Read in one HMM */
-  if (p7_hmmfile_OpenE(hmmfile, NULL, &hfp, NULL) != eslOK) p7_Fail("Failed to open HMM file %s", hmmfile);
-  if (p7_hmmfile_Read(hfp, &abc, &hmm)            != eslOK) p7_Fail("Failed to read HMM");
-
-  /* Open sequence file for reading */
-  sq     = esl_sq_CreateDigital(abc);
-  status = esl_sqfile_Open(seqfile, format, NULL, &sqfp);
-  if      (status == eslENOTFOUND) p7_Fail("No such file.");
-  else if (status == eslEFORMAT)   p7_Fail("Format unrecognized.");
-  else if (status == eslEINVAL)    p7_Fail("Can't autodetect stdin or .gz.");
-  else if (status != eslOK)        p7_Fail("Open failed, code %d.", status);
-
-  /* create default null model, then create and optimize profile */
-  bg = p7_bg_Create(abc);               
-  p7_bg_SetLength(bg, sq->n);
-  gm = p7_profile_Create(hmm->M, abc); 
-
-  /* Now reconfig the models however we were asked to */
-  if      (esl_opt_GetBoolean(go, "--fs"))  p7_ProfileConfig(hmm, bg, gm, sq->n, p7_LOCAL);
-  else if (esl_opt_GetBoolean(go, "--sw"))  p7_ProfileConfig(hmm, bg, gm, sq->n, p7_UNILOCAL);
-  else if (esl_opt_GetBoolean(go, "--ls"))  p7_ProfileConfig(hmm, bg, gm, sq->n, p7_GLOCAL);
-  else if (esl_opt_GetBoolean(go, "--s"))   p7_ProfileConfig(hmm, bg, gm, sq->n, p7_UNIGLOCAL);
-
-  /* now the optimized profile */
-  om = p7_oprofile_Create(gm->M, abc);
-  p7_oprofile_Convert(gm, om);
-  /* p7_oprofile_Dump(stdout, om);  */
-
-  /* allocate DP matrices for O(M+L) parsers */
-  fwd = p7_omx_Create(gm->M, 0, sq->n);
-  bck = p7_omx_Create(gm->M, 0, sq->n);
-  gx  = p7_gmx_Create(gm->M,    sq->n);
-
-  /* allocate DP matrices for O(ML) fills */
-  /* fwd = p7_omx_Create(gm->M, sq->n, sq->n); */
-  /* bck = p7_omx_Create(gm->M, sq->n, sq->n); */
-
-  /* p7_omx_SetDumpMode(stdout, fwd, TRUE); */     /* makes the fast DP algorithms dump their matrices */
-  /* p7_omx_SetDumpMode(stdout, bck, TRUE); */  
-
-  while ((status = esl_sqio_Read(sqfp, sq)) == eslOK)
-    {
-      p7_oprofile_ReconfigLength(om, sq->n);
-      p7_ReconfigLength(gm,          sq->n);
-      p7_bg_SetLength(bg,            sq->n);
-      p7_omx_GrowTo(fwd, om->M, 0,   sq->n); 
-      p7_omx_GrowTo(bck, om->M, 0,   sq->n); 
-      p7_gmx_GrowTo(gx,  gm->M,      sq->n); 
-
-      p7_bg_NullOne  (bg, sq->dsq, sq->n, &nullsc);
-    
-      p7_ForwardParser (sq->dsq, sq->n, om,      fwd, &fraw);
-      p7_BackwardParser(sq->dsq, sq->n, om, fwd, bck, &braw);
-
-      /* p7_Forward (sq->dsq, sq->n, om,      fwd, &fsc);        printf("forward:              %.2f nats\n", fsc);  */
-      /* p7_Backward(sq->dsq, sq->n, om, fwd, bck, &bsc);        printf("backward:             %.2f nats\n", bsc);  */
-
-      /* Comparison to other F/B implementations */
-      p7_GForward     (sq->dsq, sq->n, gm, gx,  &gfraw);
-      p7_GBackward    (sq->dsq, sq->n, gm, gx,  &gbraw);
-
-      /* p7_gmx_Dump(stdout, gx, p7_DEFAULT);  */
-
-      fsc  =  (fraw-nullsc) / eslCONST_LOG2;
-      gfsc = (gfraw-nullsc) / eslCONST_LOG2;
-      P  = esl_exp_surv(fsc,   om->evparam[p7_FTAU],  om->evparam[p7_FLAMBDA]);
-      gP = esl_exp_surv(gfsc,  gm->evparam[p7_FTAU],  gm->evparam[p7_FLAMBDA]);
-
-      if (esl_opt_GetBoolean(go, "-1"))
-	{
-	  printf("%-30s\t%-20s\t%9.2g\t%6.1f\t%9.2g\t%6.1f\n", sq->name, hmm->name, P, fsc, gP, gfsc);
-	}
-      else if (esl_opt_GetBoolean(go, "-P"))
-	{ /* output suitable for direct use in profmark benchmark postprocessors: */
-	  printf("%g\t%.2f\t%s\t%s\n", P, fsc, sq->name, hmm->name);
-	}
-      else
-	{
-	  printf("target sequence:      %s\n",        sq->name);
-	  printf("fwd filter raw score: %.2f nats\n", fraw);
-	  printf("bck filter raw score: %.2f nats\n", braw);
-	  printf("null score:           %.2f nats\n", nullsc);
-	  printf("per-seq score:        %.2f bits\n", fsc);
-	  printf("P-value:              %g\n",        P);
-	  printf("GForward raw score:   %.2f nats\n", gfraw);
-	  printf("GBackward raw score:  %.2f nats\n", gbraw);
-	  printf("GForward seq score:   %.2f bits\n", gfsc);
-	  printf("GForward P-value:     %g\n",        gP);
-	}
-
-      esl_sq_Reuse(sq);
-    }
-
-  /* cleanup */
-  esl_sq_Destroy(sq);
-  esl_sqfile_Close(sqfp);
-  p7_omx_Destroy(bck);
-  p7_omx_Destroy(fwd);
-  p7_gmx_Destroy(gx);
-  p7_oprofile_Destroy(om);
-  p7_profile_Destroy(gm);
-  p7_bg_Destroy(bg);
-  p7_hmm_Destroy(hmm);
-  p7_hmmfile_Close(hfp);
-  esl_alphabet_Destroy(abc);
-  esl_getopts_Destroy(go);
-  return 0;
-}
-#endif /*p7FWDBACK_EXAMPLE*/
 

@@ -1025,7 +1025,6 @@ fb_fs_conversion(const P7_PROFILE *gm, P7_OPROFILE *om)
 	om->rfv[x][q] = esl_sse_expf(tmp.v);
       }
 
-
   /* Transition scores*/
   for (j = 0, k = 1, q = 0; q < nq; q++, k+=4)
     {

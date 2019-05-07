@@ -2156,11 +2156,8 @@ p7_pli_postViterbi_Frameshift(P7_PIPELINE *pli, P7_PROFILE *gm, P7_BG *bg, ESL_G
   
   p7_gmx_fs_GrowTo(pli->gxf, gm->M, window_len);
   /* Parse with Forward and obtain its real Forward score. */
-  
   p7_Forward_Frameshift(subseq, window_len, gm, pli->gxf, emit_sc, &fwdsc);
-printf("fwdsc %f\n", fwdsc);
-  FILE *Serial = fopen("serial.txt", "w+");
-  p7_gmx_fs_Dump(Serial, pli->gxf, p7_DEFAULT);
+printf("\tSerial forward score %f\n", fwdsc);
 
  P7_OMX *oxf = p7_omx_fs_Create(gm->M, window_len, window_len);
  P7_OPROFILE *om = p7_oprofile_Create(gm->M, gm->abc);
@@ -2168,10 +2165,12 @@ printf("fwdsc %f\n", fwdsc);
  
  p7_Forward_Frameshift_SIMD(subseq, window_len, om, oxf, emit_sc, &fwdsc);
 
- printf("SIMD fwdsc %f\n", fwdsc);
+ printf("\tParallel forward score %f\n", fwdsc);
 
  p7_oprofile_Destroy(om);
  p7_omx_Destroy(oxf);
+
+return eslOK;
   //TODO: figure out translated filterscore
 #if 0
   //p7_bg_SetLength(bg, window_len);
