@@ -1,0 +1,17 @@
+     SUBDIR easel
+     SUBDIR miniapps
+     SUBDIR libdivsufsort
+     SUBDIR src
+     SUBDIR impl_sse
+     SUBDIR profmark
+/usr/bin/install -c -d /usr/local/bin
+/usr/bin/install -c -d /usr/local/share/man/man1
+/Library/Developer/CommandLineTools/usr/bin/make -C src install
+for file in alimask fathmm hmmalign hmmbuild hmmconvert hmmemit hmmfetch hmmlogo hmmpgmd hmmpgmd_shard hmmpress hmmscan hmmsearch hmmsim hmmstat jackhmmer phmmer hmmsearcht nhmmer nhmmscan hmmscant makehmmerdb; do \
+	   /usr/bin/install -c -m 0755 $file /usr/local/bin/ ;\
+	done
+/Library/Developer/CommandLineTools/usr/bin/make -C documentation install
+/Library/Developer/CommandLineTools/usr/bin/make -C man install
+for file in hmmer hmmalign hmmbuild hmmc2 hmmconvert hmmemit hmmfetch hmmlogo hmmpgmd hmmpgmd_shard hmmpress hmmscan hmmsearch hmmsim hmmstat jackhmmer makehmmerdb phmmer hmmsearcht hmmscant nhmmer nhmmscan alimask; do \
+	   /usr/bin/install -c -m 0664 $file.man /usr/local/share/man/man1/${file}.1 ;\
+	done

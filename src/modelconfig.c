@@ -24,6 +24,106 @@
 
 #include "hmmer.h"
 
+/*****************************************************************
+ * 0. Helper functions 
+ *****************************************************************/
+
+int get_codon_DNA_table_row(int index, int codon_count_array[]) 
+{
+  if (index == 0)
+    return 0;
+
+  int sum = 0;
+
+  for (index -= 1; index >= 0; index--) {
+    sum += codon_count_array[index]*3;   
+  }
+
+  return sum; 
+}
+
+int build_aa_transition_matrix(long double aa_transition_probs[20][20], float DNA_freq[][4])
+{
+  typedef enum {A, C, D, E, F, G, H, I, K, L, M, N, P, Q, R, S, T, V, W, Y, ST} AA; 
+
+  int AA_COUNT = 20;
+  int aa_codon_count[] = {4, 2, 2, 2, 2, 4, 2, 3, 2, 6, 1, 2, 4, 2, 6, 6, 4, 4, 1, 2, 3}; 
+
+  int codon_DNA_table[] = {
+    2,1,0, 2,1,1, 2,1,2, 2,1,3,
+    3,2,1, 3,2,3,
+    2,0,1, 2,0,3,
+    2,0,0, 2,0,2,
+    3,3,1, 3,3,3,
+    2,2,0, 2,2,1, 2,2,2, 2,2,3,
+    1,0,1, 1,0,3, 
+    0,3,0, 0,3,1, 0,3,3,
+    0,0,0, 0,0,2,
+    1,3,0, 1,3,1, 1,3,2, 1,3,3, 3,3,0, 3,3,2,
+    0,3,2,
+    0,0,1, 0,0,3,
+    1,1,0, 1,1,1, 1,1,2, 1,1,3,
+    1,0,0, 1,0,2,
+    0,2,0, 0,2,2, 1,2,0, 1,2,1, 1,2,2, 1,2,3,
+    0,2,1, 0,2,3, 3,1,0, 3,1,1, 3,1,2, 3,1,3,
+    0,1,0, 0,1,1, 0,1,2, 0,1,3, 
+    2,3,0, 2,3,1, 2,3,2, 2,3,3,
+    3,2,2,
+    3,0,1, 3,0,3,
+    3,0,0, 3,0,2, 3,2,0,
+  };
+
+  int i, j, k, l, m, row_1_index = 0, row_2_index, *codon_1, *codon_2; 
+
+  int nucleotide_index_1, nucleotide_index_2;
+
+  long double aa_trans_prob, codon_trans_prob, nuc_trans_prob;
+
+  for (i = 0; i < 20; i++) {
+    row_1_index = get_codon_DNA_table_row(i, aa_codon_count); 
+    
+    for (j = 0; j < 20; j++) {
+      row_2_index = get_codon_DNA_table_row(j, aa_codon_count);
+      aa_trans_prob = 0;
+      
+      for(k = 0; k < aa_codon_count[i]; k++) {
+        codon_1 = codon_DNA_table + row_1_index + 3*k;
+        codon_trans_prob = 0;
+
+        for(l = 0; l < aa_codon_count[j]; l++) {
+          codon_2 = codon_DNA_table + row_2_index + 3*l;
+          nuc_trans_prob = 1;
+          
+          for (m = 0; m < 3; m++) { 
+            nuc_trans_prob *= DNA_freq[*(codon_1+m)][*(codon_2+m)]; 
+//printf("Nuc Freqs: %d -> %d = %f\n",  *(codon_1+m), *(codon_2+m), DNA_freq[*(codon_1+m)][*(codon_2+m)]);
+          }
+          //printf("%Lf += %Lf\n\n", codon_trans_prob, nuc_trans_prob);
+          codon_trans_prob += nuc_trans_prob;
+        }
+        
+        //printf("\n!! %Lf += (%Lf / %d) !!\n\n",  aa_trans_prob, codon_trans_prob, aa_codon_count[j]);
+        aa_trans_prob += (codon_trans_prob / aa_codon_count[i]);
+      }
+      
+      //printf("!!! %d->%d TRANS PROB: %Lf !!!\n\n", i, j, aa_trans_prob);  
+
+      aa_transition_probs[i][j] = aa_trans_prob; 
+    }
+  }
+
+  long double row_sum;
+
+  for (i = 0; i < 20; i++) {
+    row_sum = 0;
+    for (j = 0; j < 20; j++) {
+      row_sum += aa_transition_probs[i][j];
+    }
+    for (j = 0; j < 20; j++) {
+      aa_transition_probs[i][j] /= row_sum;
+    }
+  }
+}
 
 /*****************************************************************
  * 1. Routines in the exposed API.
@@ -490,13 +590,60 @@ p7_ProfileConfig_fs(const P7_HMM *hmm, const P7_BG *bg, const ESL_GENCODE *gcode
           }
   }
 
-  for (k = 1; k <= hmm->M; k++) 
+  long double aa_tr_probs[20][20];
+  long double original_probs[20];
+  long double updated_probs[20];
+  long double updated_los[20];
+  long double lo_score;
+  long double initial_prob;
+  long double bg_prob;
+  int aa_code, i, j;
+
+  float DNA_freq_table[][4] = {
+    {0.99,0.005,0.0025,0.0025},
+    {0.01,0.98,0.005,0.005},
+    {0.005,0.005,0.98,0.01},
+    {0.0025,0.0025,0.005,0.99}
+  };  
+
+  build_aa_transition_matrix(aa_tr_probs, DNA_freq_table);
+
+  for (k = 1; k <= hmm->M; k++){
     for (v = 0; v < 4; v++)
       for (w = 0; w < 4; w++)
-        for (x = 0; x < 4; x++) {
+        for (x = 0; x < 4; x++){ 
           p7P_MSC_C3(gm_fs, k, v, w, x) += no_indel;
+          lo_score = p7P_MSC_C3(gm_fs, k, v, w, x);
+          aa_code = p7P_AMINO3(gm_fs, k, v, w, x);
+          bg_prob = bg->f[aa_code];
+          original_probs[aa_code] = exp(lo_score) * bg_prob;
         }
-  //TODO: Substitution Model
+
+    for (i = 0; i < 20; i++) {
+      updated_probs[i] = 0;
+    }
+
+    for (i = 0; i < 20; i++) {
+      initial_prob = original_probs[i];
+
+      for (j = 0; j < 20; j++) {
+        updated_probs[j] += aa_tr_probs[i][j] * initial_prob;
+      }
+    }
+
+    for (i = 0; i < 20; i++) {
+      original_probs[i] = log(original_probs[i] / bg->f[i]);
+      updated_probs[i] = log(updated_probs[i] / bg->f[i]);
+    }
+    
+    for (v = 0; v < 4; v++)
+      for (w = 0; w < 4; w++)
+        for (x = 0; x < 4; x++){ 
+          aa_code = p7P_AMINO3(gm_fs, k, v, w, x);
+          if(aa_code == 27) continue;
+          p7P_MSC_C3(gm_fs, k, v, w, x) = updated_probs[aa_code];
+        }
+  }
 
   /* Remaining specials, [NCJ][MOVE | LOOP] are set by ReconfigLength() */
   gm_fs->L = 0;            /* force ReconfigLength to reconfig */
